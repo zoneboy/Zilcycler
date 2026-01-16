@@ -1,7 +1,7 @@
 import pg from 'pg';
 
 // Handle potential ESM/CJS import mismatch for pg
-const { Pool } = pg.default || pg; // Check for .default if it's treated as ESM
+const { Pool } = (pg as any).default || pg; 
 
 if (!process.env.DATABASE_URL) {
   console.error("DATABASE_URL environment variable is missing!");
