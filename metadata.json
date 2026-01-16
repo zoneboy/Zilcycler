@@ -1,0 +1,8 @@
+{
+  "name": "Zilcycler",
+  "description": "A sustainable waste management app incentivizing recycling through role-based dashboards and ZOINTS rewards.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
