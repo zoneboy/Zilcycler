@@ -18,38 +18,6 @@ interface Transaction {
   description: string;
 }
 
-// Helper to generate a large transaction history (Mock data for old history)
-const generateTransactions = (count: number): Transaction[] => {
-  const descriptions = [
-    'Recycled Plastic Bottles', 'Recycled Mixed Paper', 'Recycled Aluminum Cans', 
-    'Recycled Glass', 'Old Electronics Pickup', 'Weekly Bonus', 'Referral Reward',
-    'Cash Withdrawal', 'Charity Donation', 'Eco-Store Purchase'
-  ];
-
-  return Array.from({ length: count }, (_, i) => {
-    const isEarned = Math.random() > 0.3;
-    const dateObj = new Date();
-    dateObj.setDate(dateObj.getDate() - (i + 1)); // Start from yesterday to allow real transactions today
-    
-    // Generate random time
-    const hours = Math.floor(Math.random() * 12) + 1;
-    const mins = Math.floor(Math.random() * 60).toString().padStart(2, '0');
-    const ampm = Math.random() > 0.5 ? 'AM' : 'PM';
-
-    return {
-      id: `TX-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-      type: isEarned ? 'EARNED' : 'REDEEMED',
-      amount: Math.floor(Math.random() * 500) + 10,
-      date: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      rawDate: dateObj,
-      timestamp: `${hours}:${mins} ${ampm}`,
-      description: descriptions[Math.floor(Math.random() * descriptions.length)]
-    };
-  });
-};
-
-// Simulate a database with thousands of records
-const FULL_MOCK_HISTORY = generateTransactions(200);
 const INITIAL_BATCH_SIZE = 20;
 
 const WalletScreen: React.FC<Props> = ({ user }) => {
@@ -108,8 +76,8 @@ const WalletScreen: React.FC<Props> = ({ user }) => {
     };
   });
 
-  // 6. Merge Real + Mock History and Sort by Date (Newest First)
-  const allTransactions = [...recentRealTransactions, ...redemptionTransactions, ...FULL_MOCK_HISTORY].sort((a, b) => {
+  // 6. Merge Real History and Sort by Date (Newest First)
+  const allTransactions = [...recentRealTransactions, ...redemptionTransactions].sort((a, b) => {
       return b.rawDate.getTime() - a.rawDate.getTime();
   });
   // --------------------------

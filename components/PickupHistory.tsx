@@ -8,29 +8,6 @@ interface Props {
   onBack: () => void;
 }
 
-// Helper to generate larger mock data for "Historical" pagination demo
-const generateMockHistory = (role: UserRole, count: number): PickupTask[] => {
-    const items = role === UserRole.ORGANIZATION 
-        ? ['Bulk Electronics (50kg)', 'Office Paper (500kg)', 'Plastic Containers (200kg)', 'Industrial Waste (1 ton)']
-        : ['Plastic (5kg), Glass (2kg)', 'Mixed Paper (10kg)', 'Electronics (1 item)', 'Plastic (8kg)', 'Metal Cans (3kg)'];
-    
-    return Array.from({ length: count }, (_, i) => {
-        const date = new Date();
-        date.setDate(date.getDate() - (i + 5)); // Start 5 days ago to avoid conflict with "real" recent data
-        
-        return {
-            id: `OLD-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
-            userId: 'history',
-            date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            time: '10:00 AM',
-            items: items[Math.floor(Math.random() * items.length)],
-            status: 'Completed' as const,
-            location: role === UserRole.ORGANIZATION ? 'Main Office HQ' : 'Home Address',
-            contact: 'Archive'
-        };
-    });
-};
-
 const BATCH_SIZE = 10;
 
 const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
@@ -42,11 +19,8 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
   // Real active pickups from Context
   const activePickups = getPickupsByRole(user.role, user.id);
 
-  // Mock historical pickups for pagination demo
-  const [historicalPickups] = useState(() => generateMockHistory(user.role, 30));
-  
-  // Combine logic: Active Context Pickups + Mock History
-  const rawData = [...activePickups, ...historicalPickups];
+  // Combine logic: Use only real data for live environment
+  const rawData = [...activePickups];
 
   // Pagination State
   const [visibleCount, setVisibleCount] = useState(BATCH_SIZE);

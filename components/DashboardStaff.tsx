@@ -8,17 +8,8 @@ interface Props {
   onLogout: () => void;
 }
 
-// Mock Drivers for Assignment Feature
-const AVAILABLE_DRIVERS = [
-    { id: 'd0', name: 'Eco Aggregators Ltd', status: 'Available', location: '1.2km away' }, // Added to match default Collector
-    { id: 'd1', name: 'Mike T.', status: 'Available', location: '2km away' },
-    { id: 'd2', name: 'Sarah J.', status: 'Busy', location: '5km away' },
-    { id: 'd3', name: 'John D.', status: 'Available', location: '1km away' },
-    { id: 'd4', name: 'Eco Van 4', status: 'Offline', location: '-' },
-];
-
 const DashboardStaff: React.FC<Props> = ({ user, onLogout }) => {
-  const { getPickupsByRole, updatePickup } = useApp();
+  const { getPickupsByRole, updatePickup, users } = useApp();
   const [filter, setFilter] = useState<'all' | 'today' | 'pending' | 'issues'>('all');
   
   // Modal State
@@ -27,6 +18,9 @@ const DashboardStaff: React.FC<Props> = ({ user, onLogout }) => {
 
   // Get all data relevant to staff
   const tasks = getPickupsByRole(UserRole.STAFF);
+
+  // Get Available Drivers (Real Users with Collector Role)
+  const drivers = users.filter(u => u.role === UserRole.COLLECTOR && u.isActive);
 
   // Helper to check if a date string is Today
   const isToday = (dateString: string) => {
@@ -237,16 +231,14 @@ const DashboardStaff: React.FC<Props> = ({ user, onLogout }) => {
                </div>
                
                <div className="p-4 overflow-y-auto space-y-2">
-                   {AVAILABLE_DRIVERS.map((driver) => (
+                   {drivers.length === 0 ? (
+                       <p className="text-center text-gray-400 text-sm py-8">No active collectors found.</p>
+                   ) : (
+                       drivers.map((driver) => (
                        <button 
                           key={driver.id}
                           onClick={() => confirmAssignment(driver.name)}
-                          disabled={driver.status === 'Offline'}
-                          className={`w-full p-3 rounded-xl border flex items-center justify-between group transition-all ${
-                              driver.status === 'Offline' 
-                              ? 'bg-gray-50 border-gray-100 opacity-60 cursor-not-allowed' 
-                              : 'bg-white border-gray-100 hover:border-green-500 hover:shadow-md'
-                          }`}
+                          className="w-full p-3 rounded-xl border flex items-center justify-between group transition-all bg-white border-gray-100 hover:border-green-500 hover:shadow-md"
                        >
                            <div className="flex items-center gap-3">
                                <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 group-hover:bg-green-100 group-hover:text-green-700 transition-colors">
@@ -254,18 +246,14 @@ const DashboardStaff: React.FC<Props> = ({ user, onLogout }) => {
                                </div>
                                <div className="text-left">
                                    <p className="font-bold text-sm text-gray-800">{driver.name}</p>
-                                   <p className="text-xs text-gray-500">{driver.location}</p>
+                                   <p className="text-xs text-gray-500">{driver.phone || 'No Phone'}</p>
                                 </div>
                            </div>
-                           <span className={`text-[10px] font-bold px-2 py-1 rounded ${
-                               driver.status === 'Available' ? 'bg-green-100 text-green-700' :
-                               driver.status === 'Busy' ? 'bg-orange-100 text-orange-700' :
-                               'bg-gray-200 text-gray-500'
-                           }`}>
-                               {driver.status}
+                           <span className="text-[10px] font-bold px-2 py-1 rounded bg-green-100 text-green-700">
+                               Available
                            </span>
                        </button>
-                   ))}
+                   )))}
                </div>
            </div>
         </div>

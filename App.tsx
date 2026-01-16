@@ -24,18 +24,8 @@ const MainApp: React.FC = () => {
   // Get live user data from context with defensive check
   const currentUser = users.find(u => u && u.id === sessionUserId) || null;
 
-  const handleLogin = (role: UserRole) => {
-    // Map role to specific mock IDs
-    let id = '';
-    switch(role) {
-        case UserRole.HOUSEHOLD: id = 'u_household'; break;
-        case UserRole.ORGANIZATION: id = 'u_org'; break;
-        case UserRole.COLLECTOR: id = 'u_collector'; break;
-        case UserRole.STAFF: id = 'u_staff'; break;
-        case UserRole.ADMIN: id = 'u_admin'; break; 
-    }
-    
-    setSessionUserId(id);
+  const handleLogin = (userId: string) => {
+    setSessionUserId(userId);
     setCurrentScreen(Screen.DASHBOARD);
   };
 
