@@ -28,8 +28,8 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
   // Account State
   const [formData, setFormData] = useState({
     name: user.name,
-    email: user.email || 'demo@zilcycler.com',
-    phone: user.phone || '+234 800 000 0000',
+    email: user.email || '',
+    phone: user.phone || '',
     gender: 'Female',
     address: '123 Green Avenue, Lagos',
     bankName: user.bankDetails?.bankName || '',
