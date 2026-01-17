@@ -162,11 +162,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const addUser = async (user: User, password?: string) => {
-    setUsers((prev) => [user, ...prev]);
-    await fetch('/api/users', {
+    // Perform API call first to ensure persistence
+    const response = await fetch('/api/users', {
         method: 'POST',
         body: JSON.stringify({ ...user, password })
     });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Registration failed: ${errorText}`);
+    }
+
+    // Only update state if successful
+    setUsers((prev) => [user, ...prev]);
   };
 
   const createRedemptionRequest = async (req: RedemptionRequest) => {

@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Ensure password_hash column exists (Migration for existing tables)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+
 -- Pickups Table
 CREATE TABLE IF NOT EXISTS pickups (
     id VARCHAR(255) PRIMARY KEY,
