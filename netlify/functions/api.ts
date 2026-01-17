@@ -94,6 +94,7 @@ export const handler = async (event: any) => {
             gender: user.gender,
             address: user.address,
             industry: user.industry,
+            esgScore: user.esg_score,
             bankDetails: {
                 bankName: user.bank_name,
                 accountNumber: user.account_number,
@@ -294,12 +295,13 @@ export const handler = async (event: any) => {
     // --- USERS ---
     if (cleanPath === 'users') {
       if (method === 'GET') {
-        const { rows } = await query('SELECT id, name, email, role, phone, avatar, zoints_balance, total_recycled_kg, is_active, gender, address, industry, bank_name, account_number, account_name, created_at FROM users');
+        const { rows } = await query('SELECT id, name, email, role, phone, avatar, zoints_balance, total_recycled_kg, is_active, gender, address, industry, esg_score, bank_name, account_number, account_name, created_at FROM users');
         const users = rows.map((u: any) => ({
             ...u,
             zointsBalance: parseFloat(u.zoints_balance),
             totalRecycledKg: parseFloat(u.total_recycled_kg),
             isActive: u.is_active,
+            esgScore: u.esg_score,
             bankDetails: {
                 bankName: u.bank_name,
                 accountNumber: u.account_number,
@@ -330,6 +332,7 @@ export const handler = async (event: any) => {
           if (updates.name !== undefined) await query('UPDATE users SET name = $1 WHERE id = $2', [updates.name, id]);
           if (updates.phone !== undefined) await query('UPDATE users SET phone = $1 WHERE id = $2', [updates.phone, id]);
           if (updates.avatar !== undefined) await query('UPDATE users SET avatar = $1 WHERE id = $2', [updates.avatar, id]);
+          if (updates.esgScore !== undefined) await query('UPDATE users SET esg_score = $1 WHERE id = $2', [updates.esgScore, id]);
           if (updates.bankDetails) {
               await query(
                   'UPDATE users SET bank_name = $1, account_number = $2, account_name = $3 WHERE id = $4',

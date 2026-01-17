@@ -1252,6 +1252,33 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                            <Coins className="w-8 h-8 text-green-200" />
                        </div>
 
+                       {selectedUser.role === UserRole.ORGANIZATION && (
+                            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                <h4 className="text-sm font-bold text-blue-800 mb-2">ESG Score Management</h4>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text" 
+                                        defaultValue={selectedUser.esgScore || ''}
+                                        id="esg-input"
+                                        className="flex-1 p-2 rounded-lg border border-blue-200 text-sm focus:outline-none focus:border-blue-500"
+                                        placeholder="e.g. A+, 95/100"
+                                    />
+                                    <button 
+                                        onClick={() => {
+                                            const val = (document.getElementById('esg-input') as HTMLInputElement).value;
+                                            updateUser(selectedUser.id, { esgScore: val });
+                                            // Optimistic update for local modal state
+                                            setSelectedUser({...selectedUser, esgScore: val});
+                                            alert("ESG Score Updated");
+                                        }}
+                                        className="bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
+                                    >
+                                        Update
+                                    </button>
+                                </div>
+                            </div>
+                       )}
+
                        <div className="grid grid-cols-2 gap-3">
                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
                                <p className="text-[10px] font-bold text-gray-400 uppercase">Total Recycled</p>

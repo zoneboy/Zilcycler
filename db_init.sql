@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
     gender VARCHAR(50),
     address TEXT,
     industry VARCHAR(100),
+    esg_score VARCHAR(10),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -25,6 +26,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(50);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS industry VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS esg_score VARCHAR(10);
 
 -- Password Resets Table
 CREATE TABLE IF NOT EXISTS password_resets (

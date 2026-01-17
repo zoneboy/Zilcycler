@@ -191,7 +191,7 @@ const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
          </div>
          <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">ESG Score</p>
-             <span className="text-2xl font-bold text-green-600 dark:text-green-500">A+</span>
+             <span className="text-2xl font-bold text-green-600 dark:text-green-500">{user.esgScore || 'N/A'}</span>
          </div>
       </div>
 

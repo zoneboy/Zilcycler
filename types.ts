@@ -62,6 +62,7 @@ export interface User {
   gender?: string;
   address?: string;
   industry?: string;
+  esgScore?: string; // Functional ESG Score
 }
 
 export interface PickupTask {
