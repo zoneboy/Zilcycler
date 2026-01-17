@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { PickupTask, UserRole, WasteRates, SystemConfig, User, RedemptionRequest, BlogPost, DropOffLocation, Message } from '../types';
+import { PickupTask, UserRole, WasteRates, SystemConfig, User, RedemptionRequest, BlogPost, DropOffLocation, Message, Certificate } from '../types';
 
 interface AppContextType {
   pickups: PickupTask[];
@@ -10,6 +10,7 @@ interface AppContextType {
   blogPosts: BlogPost[];
   dropOffLocations: DropOffLocation[];
   messages: Message[];
+  certificates: Certificate[];
   schedulePickup: (task: PickupTask) => void;
   updatePickup: (id: string, updates: Partial<PickupTask>) => void;
   getPickupsByRole: (role: UserRole, userId?: string) => PickupTask[];
@@ -27,6 +28,7 @@ interface AppContextType {
   addBlogPost: (post: BlogPost) => void;
   deleteBlogPost: (id: string) => void;
   sendMessage: (msg: Message) => void;
+  addCertificate: (cert: Certificate) => void;
   loading: boolean;
 }
 
@@ -45,6 +47,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
   const [dropOffLocations, setDropOffLocations] = useState<DropOffLocation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
 
   // Initial Data Fetch
   useEffect(() => {
@@ -58,7 +61,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               '/api/redemption', 
               '/api/blog',
               '/api/locations',
-              '/api/messages'
+              '/api/messages',
+              '/api/certificates'
             ];
             
             const responses = await Promise.all(endpoints.map(ep => fetch(ep)));
@@ -78,6 +82,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const blogData = await responses[4].json();
             const locationsData = await responses[5].json();
             const messagesData = await responses[6].json();
+            const certificatesData = await responses[7].json();
 
             setUsers(usersData);
             setPickups(pickupsData);
@@ -87,6 +92,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setBlogPosts(blogData);
             setDropOffLocations(locationsData);
             setMessages(messagesData);
+            setCertificates(certificatesData);
         } catch (error: any) {
             console.error("Failed to load initial data", error);
             setErrorMsg(error.message);
@@ -285,6 +291,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       });
   };
 
+  const addCertificate = async (cert: Certificate) => {
+      setCertificates(prev => [cert, ...prev]);
+      await fetch('/api/certificates', {
+          method: 'POST',
+          body: JSON.stringify(cert)
+      });
+  };
+
   const getPickupsByRole = (role: UserRole, userId?: string) => {
     switch (role) {
       case UserRole.HOUSEHOLD:
@@ -317,7 +331,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }
 
   return (
-    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, registerUser, sendSignupVerification, login, requestPasswordReset, resetPassword, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost }}>
+    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, certificates, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, registerUser, sendSignupVerification, login, requestPasswordReset, resetPassword, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost, addCertificate }}>
       {children}
     </AppContext.Provider>
   );

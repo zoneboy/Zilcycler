@@ -16,7 +16,8 @@ export enum Screen {
   DROP_OFF = 'DROP_OFF',
   MESSAGES = 'MESSAGES',
   WALLET = 'WALLET',
-  PICKUP_HISTORY = 'PICKUP_HISTORY'
+  PICKUP_HISTORY = 'PICKUP_HISTORY',
+  CERTIFICATES = 'CERTIFICATES'
 }
 
 export interface RecycledBreakdown {
@@ -88,6 +89,16 @@ export interface BlogPost {
   excerpt: string;
   image: string;
   category: string;
+}
+
+export interface Certificate {
+  id: string;
+  orgId: string;
+  orgName: string;
+  month: string;
+  year: number;
+  url: string; // Link to download
+  dateIssued: string;
 }
 
 export interface StatData {

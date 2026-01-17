@@ -1,22 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, UserRole, WasteRates, PickupTask, RedemptionRequest, BlogPost } from '../types';
+import { User, UserRole, WasteRates, PickupTask, RedemptionRequest, BlogPost, Certificate } from '../types';
 import { useApp } from '../context/AppContext';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
-import { Users, Settings, LogOut, ArrowLeft, Ban, CheckCircle, ShieldAlert, Save, Coins, Search, Mail, Phone, ChevronRight, Truck, Calendar, ArrowDownUp, X, Filter, MapPin, Package, User as UserIcon, AlertTriangle, ImageIcon, Download, Loader2, Scale, FileText, Banknote, Lock, Landmark, UserPlus, BookOpen, Trash2, Plus, Image as ImageIcon2, Shield } from 'lucide-react';
+import { Users, Settings, LogOut, ArrowLeft, Ban, CheckCircle, ShieldAlert, Save, Coins, Search, Mail, Phone, ChevronRight, Truck, Calendar, ArrowDownUp, X, Filter, MapPin, Package, User as UserIcon, AlertTriangle, ImageIcon, Download, Loader2, Scale, FileText, Banknote, Lock, Landmark, UserPlus, BookOpen, Trash2, Plus, Image as ImageIcon2, Shield, FileBadge, Upload } from 'lucide-react';
 
 interface Props {
   user: User;
   onLogout: () => void;
 }
 
-type AdminView = 'DASHBOARD' | 'USERS' | 'SETTINGS' | 'PICKUPS' | 'DAILY_STATS' | 'REQUESTS' | 'TIPS';
+type AdminView = 'DASHBOARD' | 'USERS' | 'SETTINGS' | 'PICKUPS' | 'DAILY_STATS' | 'REQUESTS' | 'TIPS' | 'CERTIFICATES';
 type SortOption = 'NAME' | 'WEIGHT_DESC' | 'WEIGHT_ASC';
 
 const COLORS = ['#16a34a', '#2563eb', '#ca8a04', '#dc2626', '#9333ea', '#0891b2'];
 const PICKUP_BATCH_SIZE = 10;
 
 const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
-  const { wasteRates, updateWasteRates, pickups, sysConfig, updateSysConfig, users, updateUser, redemptionRequests, updateRedemptionStatus, addUser, blogPosts, addBlogPost, deleteBlogPost } = useApp();
+  const { wasteRates, updateWasteRates, pickups, sysConfig, updateSysConfig, users, updateUser, redemptionRequests, updateRedemptionStatus, addUser, blogPosts, addBlogPost, deleteBlogPost, certificates, addCertificate } = useApp();
   const [currentView, setCurrentView] = useState<AdminView>('DASHBOARD');
   
   // User Management State
@@ -46,6 +46,10 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
   // Tips/Content Management State
   const [isAddTipOpen, setIsAddTipOpen] = useState(false);
   const [newTip, setNewTip] = useState({ title: '', category: 'Tips', excerpt: '', image: '' });
+
+  // Certificates State
+  const [certForm, setCertForm] = useState({ orgId: '', month: 'January', year: new Date().getFullYear().toString(), url: '' });
+  const [isCertModalOpen, setIsCertModalOpen] = useState(false);
 
   // Filtering & Sorting State (Users)
   const [showFilters, setShowFilters] = useState(false);
@@ -153,6 +157,29 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       addBlogPost(newPost);
       setIsAddTipOpen(false);
       setNewTip({ title: '', category: 'Tips', excerpt: '', image: '' });
+  };
+
+  const handleAddCertificate = (e: React.FormEvent) => {
+      e.preventDefault();
+      const org = users.find(u => u.id === certForm.orgId);
+      if (!org) return;
+
+      const newCert: Certificate = {
+          id: `cert_${Date.now()}`,
+          orgId: certForm.orgId,
+          orgName: org.name,
+          month: certForm.month,
+          year: parseInt(certForm.year),
+          url: certForm.url || 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf', // Mock default
+          dateIssued: new Date().toISOString()
+      };
+      addCertificate(newCert);
+      setIsCertModalOpen(false);
+      setCertForm({ orgId: '', month: 'January', year: new Date().getFullYear().toString(), url: '' });
+  };
+
+  const handleGenerateMockUrl = () => {
+      setCertForm(prev => ({...prev, url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'}));
   };
 
   const handleExportPickups = (data: PickupTask[]) => {
@@ -800,6 +827,139 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       </div>
   );
 
+  const renderCertificatesManagement = () => {
+      const orgUsers = users.filter(u => u.role === UserRole.ORGANIZATION);
+
+      return (
+          <div className="space-y-6 animate-fade-in h-full flex flex-col">
+              <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                      <button onClick={() => setCurrentView('DASHBOARD')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                          <ArrowLeft className="w-6 h-6 text-gray-600" />
+                      </button>
+                      <h2 className="text-lg font-bold text-gray-900">Certificate Management</h2>
+                  </div>
+                  <button 
+                      onClick={() => setIsCertModalOpen(true)}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md hover:bg-blue-700 transition-colors flex items-center gap-2"
+                  >
+                      <Upload className="w-4 h-4" /> Upload
+                  </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-4 pb-4">
+                  {certificates.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-gray-400 border-2 border-dashed border-gray-100 rounded-3xl">
+                          <FileBadge className="w-12 h-12 mb-3 opacity-20" />
+                          <p>No certificates uploaded yet.</p>
+                      </div>
+                  ) : (
+                      certificates.map((cert) => (
+                          <div key={cert.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between group hover:border-blue-200">
+                              <div className="flex items-center gap-4">
+                                  <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center text-blue-600">
+                                      <FileBadge className="w-5 h-5" />
+                                  </div>
+                                  <div>
+                                      <h3 className="font-bold text-gray-800 text-sm">{cert.orgName}</h3>
+                                      <p className="text-xs text-gray-500">{cert.month} {cert.year}</p>
+                                  </div>
+                              </div>
+                              <a 
+                                href={cert.url} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="text-blue-600 hover:underline text-xs font-bold flex items-center gap-1"
+                              >
+                                  View <Download className="w-3 h-3" />
+                              </a>
+                          </div>
+                      ))
+                  )}
+              </div>
+
+              {/* Upload Modal */}
+              {isCertModalOpen && (
+                  <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsCertModalOpen(false)}></div>
+                      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up p-6">
+                          <div className="flex justify-between items-center mb-6">
+                              <h3 className="font-bold text-gray-900">Upload Certificate</h3>
+                              <button onClick={() => setIsCertModalOpen(false)} className="p-2 bg-gray-100 rounded-full">
+                                  <X className="w-5 h-5 text-gray-600" />
+                              </button>
+                          </div>
+                          
+                          <form onSubmit={handleAddCertificate} className="space-y-4">
+                              <div>
+                                  <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Organization</label>
+                                  <select 
+                                      required
+                                      value={certForm.orgId}
+                                      onChange={(e) => setCertForm({...certForm, orgId: e.target.value})}
+                                      className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:border-blue-500 font-bold text-gray-800"
+                                  >
+                                      <option value="">Select Organization</option>
+                                      {orgUsers.map(u => (
+                                          <option key={u.id} value={u.id}>{u.name}</option>
+                                      ))}
+                                  </select>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Month</label>
+                                      <select 
+                                          value={certForm.month}
+                                          onChange={(e) => setCertForm({...certForm, month: e.target.value})}
+                                          className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:border-blue-500 font-bold text-gray-800"
+                                      >
+                                          {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
+                                              <option key={m} value={m}>{m}</option>
+                                          ))}
+                                      </select>
+                                  </div>
+                                  <div>
+                                      <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Year</label>
+                                      <input 
+                                          type="number"
+                                          value={certForm.year}
+                                          onChange={(e) => setCertForm({...certForm, year: e.target.value})}
+                                          className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:border-blue-500 font-bold text-gray-800"
+                                      />
+                                  </div>
+                              </div>
+                              <div>
+                                  <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Certificate URL (PDF)</label>
+                                  <div className="relative">
+                                      <input 
+                                          type="text" 
+                                          required
+                                          value={certForm.url}
+                                          onChange={(e) => setCertForm({...certForm, url: e.target.value})}
+                                          className="w-full p-3 pl-3 pr-20 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:border-blue-500 text-sm text-gray-800"
+                                          placeholder="https://..."
+                                      />
+                                      <button 
+                                          type="button"
+                                          onClick={handleGenerateMockUrl}
+                                          className="absolute right-2 top-2 bottom-2 px-2 bg-gray-200 rounded-lg text-[10px] font-bold text-gray-600 hover:bg-gray-300 transition-colors"
+                                      >
+                                          Mock
+                                      </button>
+                                  </div>
+                              </div>
+                              
+                              <button type="submit" className="w-full py-4 rounded-xl bg-blue-600 text-white font-bold shadow-lg hover:bg-blue-700 transition-transform active:scale-95 mt-2">
+                                  Issue Certificate
+                              </button>
+                          </form>
+                      </div>
+                  </div>
+              )}
+          </div>
+      );
+  };
+
   const renderDashboard = () => (
     <div className="space-y-6 animate-fade-in">
         {/* Key Metrics */}
@@ -938,6 +1098,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
             <h3 className="font-bold text-gray-800 text-sm">Quick Actions</h3>
             <MenuLink icon={<Banknote className="w-5 h-5" />} label="Redemption Requests" onClick={() => setCurrentView('REQUESTS')} />
             <MenuLink icon={<Users className="w-5 h-5" />} label="User Management & Profiles" onClick={() => setCurrentView('USERS')} />
+            <MenuLink icon={<FileBadge className="w-5 h-5" />} label="Certificates" onClick={() => setCurrentView('CERTIFICATES')} />
             <MenuLink icon={<BookOpen className="w-5 h-5" />} label="Tips & Content Management" onClick={() => setCurrentView('TIPS')} />
             <MenuLink icon={<Settings className="w-5 h-5" />} label="Platform Settings & Rates" onClick={() => setCurrentView('SETTINGS')} />
         </div>
@@ -1443,6 +1604,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
           {currentView === 'PICKUPS' && renderPickupsManagement()}
           {currentView === 'DAILY_STATS' && renderDailyStats()}
           {currentView === 'TIPS' && renderContentManagement()}
+          {currentView === 'CERTIFICATES' && renderCertificatesManagement()}
       </div>
     </div>
   );

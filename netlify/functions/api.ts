@@ -475,6 +475,31 @@ export const handler = async (event: any) => {
         }
     }
 
+    // --- CERTIFICATES ---
+    if (cleanPath === 'certificates') {
+        if (method === 'GET') {
+            const { rows } = await query('SELECT * FROM certificates ORDER BY created_at DESC');
+            const certs = rows.map((c: any) => ({
+                id: c.id,
+                orgId: c.org_id,
+                orgName: c.org_name,
+                month: c.month,
+                year: c.year,
+                url: c.url,
+                dateIssued: c.created_at
+            }));
+            return response(200, certs);
+        }
+        if (method === 'POST') {
+            const c = body;
+            await query(
+                'INSERT INTO certificates (id, org_id, org_name, month, year, url) VALUES ($1, $2, $3, $4, $5, $6)',
+                [c.id, c.orgId, c.orgName, c.month, c.year, c.url]
+            );
+            return response(201, { success: true });
+        }
+    }
+
     // --- LOCATIONS ---
     if (cleanPath === 'locations') {
         if (method === 'GET') {

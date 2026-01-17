@@ -241,7 +241,7 @@ const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
         </button>
 
         <button 
-          onClick={() => alert("Sustainability Report downloaded!")}
+          onClick={() => onNavigate(Screen.CERTIFICATES)}
           className="w-full group flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all"
         >
           <div className="flex items-center gap-4">
@@ -253,7 +253,7 @@ const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
               <p className="text-xs text-gray-500 dark:text-gray-400">Download monthly ESG reports</p>
             </div>
           </div>
-          <Download className="text-gray-300 dark:text-gray-600 group-hover:text-blue-600 dark:group-hover:text-blue-400 w-5 h-5" />
+          <ChevronRight className="text-gray-300 dark:text-gray-600 group-hover:text-blue-600 dark:group-hover:text-blue-400 w-5 h-5" />
         </button>
 
         <button 

@@ -102,6 +102,17 @@ CREATE TABLE IF NOT EXISTS blog_posts (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Certificates Table (NEW)
+CREATE TABLE IF NOT EXISTS certificates (
+    id VARCHAR(255) PRIMARY KEY,
+    org_id VARCHAR(255) REFERENCES users(id),
+    org_name VARCHAR(255),
+    month VARCHAR(50),
+    year INT,
+    url TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Drop Off Locations Table
 CREATE TABLE IF NOT EXISTS drop_off_locations (
     id VARCHAR(255) PRIMARY KEY,

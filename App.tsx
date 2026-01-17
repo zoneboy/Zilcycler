@@ -11,9 +11,10 @@ import SchedulePickup from './components/SchedulePickup';
 import BlogList from './components/BlogList';
 import Settings from './components/Settings';
 import DropOffLocations from './components/DropOffLocations';
-import MessagesWithUser from './components/Messages'; // Updated import
+import MessagesWithUser from './components/Messages'; 
 import WalletScreen from './components/WalletScreen';
 import PickupHistory from './components/PickupHistory';
+import Certificates from './components/Certificates';
 import { Home, FileText, Settings as SettingsIcon, LogOut, ArrowLeft, Building2, Wallet } from 'lucide-react';
 
 const MainApp: React.FC = () => {
@@ -70,6 +71,8 @@ const MainApp: React.FC = () => {
         return <WalletScreen user={effectiveUser} />;
       case Screen.PICKUP_HISTORY:
         return <PickupHistory user={effectiveUser} onBack={() => setCurrentScreen(Screen.DASHBOARD)} />;
+      case Screen.CERTIFICATES:
+        return <Certificates user={effectiveUser} onBack={() => setCurrentScreen(Screen.DASHBOARD)} />;
       default:
         return <DashboardHousehold user={effectiveUser} onNavigate={setCurrentScreen} />; // Fallback
     }
