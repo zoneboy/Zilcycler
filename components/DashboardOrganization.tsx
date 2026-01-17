@@ -20,8 +20,10 @@ const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
   const myPickups = getPickupsByRole(user.role, user.id);
   const completedPickups = myPickups.filter(p => p.status === 'Completed');
 
-  const earnedZoints = completedPickups.reduce((sum, p) => sum + (p.earnedZoints || 0), 0);
-  const currentBalance = user.zointsBalance + earnedZoints;
+  // Fix: Use user.zointsBalance directly as it is maintained by backend/context
+  const currentBalance = user.zointsBalance;
+  
+  // Total Recycled calculation - sum of completed pickups + optional base/history
   const totalRecycled = (user.totalRecycledKg || 0) + completedPickups.reduce((sum, p) => sum + (p.weight || 0), 0);
 
   // Dynamic CO2 Calculation

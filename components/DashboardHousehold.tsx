@@ -20,13 +20,16 @@ const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
   
   const completedPickups = myPickups.filter(p => p.status === 'Completed');
   const sessionRecycledKg = completedPickups.reduce((acc, curr) => acc + (curr.weight || 0), 0);
-  const sessionZoints = completedPickups.reduce((acc, curr) => acc + (curr.earnedZoints || 0), 0);
+  
+  // NOTE: user.zointsBalance comes from the database which is already updated when pickups complete.
+  // We do NOT need to add session earnings to it again.
+  const displayZoints = user.zointsBalance;
 
+  // For Recycled Kg, the backend currently does not aggregate this in the users table automatically on pickup complete,
+  // so we calculate it from the pickups list. Assuming user.totalRecycledKg is 0 or historical data.
   const displayRecycled = (user.totalRecycledKg || 0) + sessionRecycledKg;
-  const displayZoints = user.zointsBalance + sessionZoints;
 
   // Calculate Dynamic CO2 Saved
-  // Note: This calculates based on current session pickups + historical estimates if details missing
   const calculateTotalCO2 = () => {
       let co2 = 0;
       
@@ -47,8 +50,6 @@ const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
       });
 
       // 2. Add historical data estimate
-      // Since historical data might just be totalRecycledKg without breakdown in user object, 
-      // or provided via recycledBreakdown array.
       if (user.recycledBreakdown) {
           user.recycledBreakdown.forEach(item => {
               const rate = wasteRates[item.category]?.co2 || 0.5;

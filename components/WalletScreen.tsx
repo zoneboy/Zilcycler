@@ -37,15 +37,11 @@ const WalletScreen: React.FC<Props> = ({ user }) => {
   // 1. Get Completed Pickups from Context for this user (Earnings)
   const completedPickups = getPickupsByRole(user.role, user.id).filter(p => p.status === 'Completed' && p.earnedZoints && p.earnedZoints > 0);
   
-  // 2. Calculate Extra Earnings from these pickups
-  const earnedBalance = completedPickups.reduce((sum, p) => sum + (p.earnedZoints || 0), 0);
-  
-  // 3. Calculate Total Balance consistent with Dashboard logic
-  // Dashboard Logic: User.zointsBalance + Sum(CompletedPickups.earnedZoints)
-  // Note: AppContext decrements User.zointsBalance on redemption, so we just add earnings here.
-  const currentTotalBalance = user.zointsBalance + earnedBalance;
+  // 2. Use user.zointsBalance as the single source of truth for total balance.
+  // The backend handles adding earnings to this balance when pickups are completed.
+  const currentTotalBalance = user.zointsBalance;
 
-  // 4. Convert Pickups to Transactions
+  // 3. Convert Pickups to Transactions
   const recentRealTransactions: Transaction[] = completedPickups.map(p => {
     const pDate = new Date(p.date + ' ' + p.time); // Attempt to parse
     const validDate = isNaN(pDate.getTime()) ? new Date() : pDate;
@@ -61,7 +57,7 @@ const WalletScreen: React.FC<Props> = ({ user }) => {
     };
   });
 
-  // 5. Convert Redemption Requests to Transactions (Spendings)
+  // 4. Convert Redemption Requests to Transactions (Spendings)
   const myRedemptions = redemptionRequests.filter(r => r.userId === user.id);
   const redemptionTransactions: Transaction[] = myRedemptions.map(r => {
     const rDate = new Date(r.date);
@@ -76,7 +72,7 @@ const WalletScreen: React.FC<Props> = ({ user }) => {
     };
   });
 
-  // 6. Merge Real History and Sort by Date (Newest First)
+  // 5. Merge Real History and Sort by Date (Newest First)
   const allTransactions = [...recentRealTransactions, ...redemptionTransactions].sort((a, b) => {
       return b.rawDate.getTime() - a.rawDate.getTime();
   });
