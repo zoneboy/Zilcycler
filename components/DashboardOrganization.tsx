@@ -13,7 +13,7 @@ interface Props {
 const COLORS = ['#4ade80', '#60a5fa', '#facc15', '#94a3b8', '#fb7185', '#a78bfa'];
 
 const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
-  const { getPickupsByRole } = useApp();
+  const { getPickupsByRole, blogPosts } = useApp();
   const [showAnalytics, setShowAnalytics] = useState(false);
 
   // Dynamic Calculations
@@ -23,6 +23,9 @@ const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
   const earnedZoints = completedPickups.reduce((sum, p) => sum + (p.earnedZoints || 0), 0);
   const currentBalance = user.zointsBalance + earnedZoints;
   const totalRecycled = (user.totalRecycledKg || 0) + completedPickups.reduce((sum, p) => sum + (p.weight || 0), 0);
+
+  // Get the latest tip for the dashboard teaser
+  const latestTip = blogPosts.length > 0 ? blogPosts[0] : null;
 
   // Chart Data Calculations
   const { monthlyData, compositionData } = useMemo(() => {
@@ -269,6 +272,27 @@ const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
           <ChevronRight className="text-gray-300 dark:text-gray-600 group-hover:text-purple-600 dark:group-hover:text-purple-400" />
         </button>
       </div>
+
+      {/* Dynamic Educational Content Teaser */}
+      {latestTip && (
+        <div className="bg-stone-100 dark:bg-gray-800 rounded-3xl p-5 relative overflow-hidden transition-colors">
+          <div className="relative z-10">
+            <h3 className="font-bold text-gray-800 dark:text-white text-lg mb-2">{latestTip.title}</h3>
+            <div className="flex gap-4">
+               <img src={latestTip.image} className="w-20 h-20 rounded-xl object-cover" alt="Tip" />
+               <div className="flex-1">
+                 <p className="text-sm text-gray-600 dark:text-gray-300 mb-3 font-medium line-clamp-2">{latestTip.excerpt}</p>
+                 <button 
+                  onClick={() => onNavigate(Screen.BLOG)}
+                  className="bg-white dark:bg-gray-700 px-4 py-2 rounded-full text-xs font-bold text-gray-800 dark:text-white shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                 >
+                   Read More
+                 </button>
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
