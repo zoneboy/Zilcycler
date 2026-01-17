@@ -10,7 +10,7 @@ interface Props {
 }
 
 const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
-  const { getPickupsByRole } = useApp();
+  const { getPickupsByRole, blogPosts } = useApp();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   // Get real pickup counts and derive stats
@@ -24,6 +24,9 @@ const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
 
   const displayRecycled = (user.totalRecycledKg || 0) + sessionRecycledKg;
   const displayZoints = user.zointsBalance + sessionZoints;
+
+  // Get the latest tip for the dashboard teaser
+  const latestTip = blogPosts.length > 0 ? blogPosts[0] : null;
 
   // Calculate Dynamic Breakdown for Modal
   const getAggregatedBreakdown = (): RecycledBreakdown[] => {
@@ -165,24 +168,26 @@ const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
         </button>
       </div>
 
-      {/* Teaser for Educational Content */}
-      <div className="bg-stone-100 dark:bg-gray-800 rounded-3xl p-5 relative overflow-hidden transition-colors">
-        <div className="relative z-10">
-          <h3 className="font-bold text-gray-800 dark:text-white text-lg mb-2">Recycling Tips</h3>
-          <div className="flex gap-4">
-             <img src="https://picsum.photos/100/100" className="w-20 h-20 rounded-xl object-cover" alt="Recycling" />
-             <div className="flex-1">
-               <p className="text-sm text-gray-600 dark:text-gray-300 mb-3 font-medium">Learn how to segregate your waste effectively.</p>
-               <button 
-                onClick={() => onNavigate(Screen.BLOG)}
-                className="bg-white dark:bg-gray-700 px-4 py-2 rounded-full text-xs font-bold text-gray-800 dark:text-white shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
-               >
-                 Read More
-               </button>
-             </div>
+      {/* Dynamic Educational Content Teaser */}
+      {latestTip && (
+        <div className="bg-stone-100 dark:bg-gray-800 rounded-3xl p-5 relative overflow-hidden transition-colors">
+          <div className="relative z-10">
+            <h3 className="font-bold text-gray-800 dark:text-white text-lg mb-2">{latestTip.title}</h3>
+            <div className="flex gap-4">
+               <img src={latestTip.image} className="w-20 h-20 rounded-xl object-cover" alt="Tip" />
+               <div className="flex-1">
+                 <p className="text-sm text-gray-600 dark:text-gray-300 mb-3 font-medium line-clamp-2">{latestTip.excerpt}</p>
+                 <button 
+                  onClick={() => onNavigate(Screen.BLOG)}
+                  className="bg-white dark:bg-gray-700 px-4 py-2 rounded-full text-xs font-bold text-gray-800 dark:text-white shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                 >
+                   Read More
+                 </button>
+               </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Breakdown Modal */}
       {showBreakdown && (
