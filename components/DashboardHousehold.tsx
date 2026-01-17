@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User, Screen, RecycledBreakdown } from '../types';
 import { useApp } from '../context/AppContext';
 import WalletCard from './WalletCard';
-import { Truck, MapPin, ChevronRight, Scale, Leaf, X, Clock } from 'lucide-react';
+import { Truck, MapPin, ChevronRight, Scale, Leaf, X, Clock, User as UserIcon } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -63,11 +63,17 @@ const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Welcome, {user.name.split(' ')[0]}!</h1>
           <p className="text-gray-500 text-sm dark:text-gray-400">Let's make the world cleaner.</p>
         </div>
-        <img 
-          src={user.avatar} 
-          alt="Profile" 
-          className="w-12 h-12 rounded-full border-2 border-green-100 dark:border-green-900 object-cover"
-        />
+        {user.avatar ? (
+            <img 
+              src={user.avatar} 
+              alt="Profile" 
+              className="w-12 h-12 rounded-full border-2 border-green-100 dark:border-green-900 object-cover"
+            />
+        ) : (
+            <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-700 dark:text-green-400 border-2 border-green-50 dark:border-green-800">
+                <UserIcon className="w-6 h-6" />
+            </div>
+        )}
       </div>
 
       {/* Wallet - Now reactive */}

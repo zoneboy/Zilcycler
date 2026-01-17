@@ -164,11 +164,17 @@ const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
              <span className="text-xs font-bold uppercase tracking-wide">Corporate Account</span>
           </div>
         </div>
-        <img 
-          src={user.avatar} 
-          alt="Profile" 
-          className="w-12 h-12 rounded-lg border-2 border-blue-100 dark:border-blue-900 object-cover"
-        />
+        {user.avatar ? (
+            <img 
+              src={user.avatar} 
+              alt="Profile" 
+              className="w-12 h-12 rounded-lg border-2 border-blue-100 dark:border-blue-900 object-cover"
+            />
+        ) : (
+            <div className="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-700 dark:text-blue-400 border-2 border-blue-50 dark:border-blue-800">
+                <Building2 className="w-6 h-6" />
+            </div>
+        )}
       </div>
 
       {/* Wallet - Organizations earn points too */}

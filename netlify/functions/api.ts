@@ -309,12 +309,14 @@ export const handler = async (event: any) => {
         return response(200, users);
       }
       if (method === 'POST') {
-        const { id, name, email, role, phone, password, gender, address, industry } = body;
+        const { id, name, email, role, phone, password, gender, address, industry, avatar } = body;
         const passwordHash = password ? hashPassword(password) : null;
+        // Use provided avatar or empty string (no random default)
+        const finalAvatar = avatar || ''; 
 
         await query(
             `INSERT INTO users (id, name, email, role, phone, avatar, password_hash, gender, address, industry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [id, name, email, role, phone, `https://i.pravatar.cc/150?u=${id}`, passwordHash, gender, address, industry]
+            [id, name, email, role, phone, finalAvatar, passwordHash, gender, address, industry]
         );
         return response(201, { message: "User created" });
       }
@@ -327,6 +329,7 @@ export const handler = async (event: any) => {
           if (updates.industry !== undefined) await query('UPDATE users SET industry = $1 WHERE id = $2', [updates.industry, id]);
           if (updates.name !== undefined) await query('UPDATE users SET name = $1 WHERE id = $2', [updates.name, id]);
           if (updates.phone !== undefined) await query('UPDATE users SET phone = $1 WHERE id = $2', [updates.phone, id]);
+          if (updates.avatar !== undefined) await query('UPDATE users SET avatar = $1 WHERE id = $2', [updates.avatar, id]);
           if (updates.bankDetails) {
               await query(
                   'UPDATE users SET bank_name = $1, account_number = $2, account_name = $3 WHERE id = $4',

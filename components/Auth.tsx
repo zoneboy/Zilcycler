@@ -219,7 +219,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           email: signupData.email,
           phone: signupData.phone,
           role: signupData.role,
-          avatar: `https://i.pravatar.cc/150?u=${signupData.email}`,
+          avatar: '', // No default random avatar
           gender: signupData.gender,
           address: signupData.address,
           industry: signupData.industry, // Only used if Organization

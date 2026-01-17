@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
 import { useApp } from '../context/AppContext';
-import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, AlertCircle, ArrowLeft, Save, Lock, Eye, EyeOff, Check, Globe, Trash2, AlertTriangle, Landmark } from 'lucide-react';
+import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, AlertCircle, ArrowLeft, Save, Lock, Eye, EyeOff, Check, Globe, Trash2, AlertTriangle, Landmark, Camera } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -14,6 +14,7 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
   const { updateUser } = useApp();
   const [currentView, setCurrentView] = useState<SettingsView>('MAIN');
   const [notifications, setNotifications] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Initialize dark mode from localStorage or system preference
   const [darkMode, setDarkMode] = useState(() => {
@@ -34,6 +35,7 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     phone: user.phone || '',
     gender: user.gender || '',
     address: user.address || '',
+    avatar: user.avatar || '',
     bankName: user.bankDetails?.bankName || '',
     accountNumber: user.bankDetails?.accountNumber || '',
     accountName: user.bankDetails?.accountName || ''
@@ -56,6 +58,23 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     localStorage.setItem('darkMode', String(darkMode));
   }, [darkMode]);
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Basic size validation (e.g., max 2MB)
+      if (file.size > 2 * 1024 * 1024) {
+          alert("File size too large. Please upload an image smaller than 2MB.");
+          return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, avatar: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSaveAccount = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -65,6 +84,7 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
         phone: formData.phone,
         gender: formData.gender,
         address: formData.address,
+        avatar: formData.avatar,
         bankDetails: {
             bankName: formData.bankName,
             accountNumber: formData.accountNumber,
@@ -98,7 +118,13 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     <div className="space-y-6 animate-fade-in">
       {/* Profile Card */}
       <div className="flex items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
-        <img src={user.avatar} alt="Profile" className="w-16 h-16 rounded-full border-2 border-green-100 dark:border-green-900 object-cover" />
+        {user.avatar ? (
+            <img src={user.avatar} alt="Profile" className="w-16 h-16 rounded-full border-2 border-green-100 dark:border-green-900 object-cover" />
+        ) : (
+            <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-700 dark:text-green-400 border-2 border-green-50 dark:border-green-800">
+                <CircleUser className="w-8 h-8" />
+            </div>
+        )}
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">{user.name}</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{user.role.toLowerCase()}</p>
@@ -202,11 +228,24 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
         <form onSubmit={handleSaveAccount} className="space-y-4">
              {/* Avatar Section */}
              <div className="flex flex-col items-center mb-6">
-                 <div className="relative">
-                    <img src={user.avatar} alt="Profile" className="w-24 h-24 rounded-full border-4 border-white dark:border-gray-800 shadow-lg object-cover" />
-                    <button type="button" className="absolute bottom-0 right-0 bg-green-600 text-white p-2 rounded-full shadow-md hover:bg-green-700 transition-colors">
-                         <CircleUser className="w-4 h-4" />
-                    </button>
+                 <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                    {formData.avatar ? (
+                        <img src={formData.avatar} alt="Profile" className="w-24 h-24 rounded-full border-4 border-white dark:border-gray-800 shadow-lg object-cover" />
+                    ) : (
+                        <div className="w-24 h-24 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-400 dark:text-gray-500 border-4 border-white dark:border-gray-800 shadow-lg">
+                            <CircleUser className="w-12 h-12" />
+                        </div>
+                    )}
+                    <div className="absolute bottom-0 right-0 bg-green-600 text-white p-2 rounded-full shadow-md hover:bg-green-700 transition-colors">
+                         <Camera className="w-4 h-4" />
+                    </div>
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        className="hidden" 
+                        accept="image/*" 
+                        onChange={handleImageChange} 
+                    />
                  </div>
                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Tap to change photo</p>
              </div>
