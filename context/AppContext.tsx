@@ -17,6 +17,8 @@ interface AppContextType {
   updateSysConfig: (config: SystemConfig) => void;
   updateUser: (id: string, updates: Partial<User>) => void;
   login: (email: string, password: string) => Promise<User>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  resetPassword: (email: string, otp: string, newPassword: string) => Promise<void>;
   addUser: (user: User, password?: string) => Promise<void>;
   createRedemptionRequest: (req: RedemptionRequest) => void;
   updateRedemptionStatus: (id: string, status: 'Approved' | 'Rejected') => void;
@@ -106,6 +108,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
 
       return await response.json();
+  };
+
+  const requestPasswordReset = async (email: string): Promise<void> => {
+      const response = await fetch('/api/auth/forgot-password', {
+          method: 'POST',
+          body: JSON.stringify({ email })
+      });
+      
+      if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Request failed');
+      }
+  };
+
+  const resetPassword = async (email: string, otp: string, newPassword: string): Promise<void> => {
+      const response = await fetch('/api/auth/reset-password', {
+          method: 'POST',
+          body: JSON.stringify({ email, otp, newPassword })
+      });
+      
+      if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Reset failed');
+      }
   };
 
   const schedulePickup = async (task: PickupTask) => {
@@ -264,7 +290,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }
 
   return (
-    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, login, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost }}>
+    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, login, requestPasswordReset, resetPassword, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost }}>
       {children}
     </AppContext.Provider>
   );

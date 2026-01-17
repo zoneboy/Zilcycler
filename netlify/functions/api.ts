@@ -1,5 +1,6 @@
 import { query } from './db';
 import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 
 // Helper for standard response
 const response = (statusCode: number, body: any) => ({
@@ -9,6 +10,18 @@ const response = (statusCode: number, body: any) => ({
     "Access-Control-Allow-Origin": "*" // Allow CORS if needed
   },
   body: JSON.stringify(body)
+});
+
+// Configure Nodemailer Transporter
+// Note: These values are read automatically from Netlify Environment Variables in production
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
 });
 
 // Password Utils
@@ -86,6 +99,90 @@ export const handler = async (event: any) => {
         };
 
         return response(200, userObj);
+    }
+
+    // --- PASSWORD RESET ---
+    if (cleanPath === 'auth/forgot-password' && method === 'POST') {
+        const { email } = body;
+        
+        // Validate Environment Configuration
+        if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+            console.error("CRITICAL: Missing SMTP Environment Variables in Netlify Settings.");
+            return response(500, { error: "System configuration error. Please contact support." });
+        }
+
+        const { rows } = await query('SELECT id, name FROM users WHERE email = $1', [email]);
+        
+        if (rows.length === 0) {
+            return response(404, { error: "No account found with this email" });
+        }
+        
+        const userName = rows[0].name;
+
+        // Generate 6 digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        // Expires in 10 minutes
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+        await query(
+            'INSERT INTO password_resets (email, otp, expires_at) VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3',
+            [email, otp, expiresAt]
+        );
+
+        // Send Email via Nodemailer
+        try {
+            await transporter.sendMail({
+                from: process.env.SMTP_FROM || '"Zilcycler Support" <noreply@zilcycler.com>',
+                to: email,
+                subject: 'Reset Your Zilcycler Password',
+                html: `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+                        <h2 style="color: #166534; text-align: center;">Password Reset Request</h2>
+                        <p>Hello ${userName},</p>
+                        <p>We received a request to reset your password for your Zilcycler account.</p>
+                        <div style="text-align: center; margin: 30px 0;">
+                            <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #166534; background: #f0fdf4; padding: 10px 20px; border-radius: 5px;">${otp}</span>
+                        </div>
+                        <p>This code is valid for <strong>10 minutes</strong>.</p>
+                        <p style="color: #666; font-size: 12px; margin-top: 30px;">If you didn't request this change, you can safely ignore this email.</p>
+                        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+                        <p style="text-align: center; color: #999; font-size: 12px;">&copy; ${new Date().getFullYear()} Zilcycler. All rights reserved.</p>
+                    </div>
+                `,
+                text: `Your Zilcycler password reset code is: ${otp}. This code expires in 10 minutes.`
+            });
+            console.log(`[Email] OTP sent successfully to ${email}`);
+        } catch (emailError: any) {
+            console.error("Failed to send OTP email:", emailError);
+            return response(500, { error: "Failed to send email. Please check server configuration." });
+        }
+        
+        return response(200, { message: "OTP sent to email" });
+    }
+
+    if (cleanPath === 'auth/reset-password' && method === 'POST') {
+        const { email, otp, newPassword } = body;
+        
+        const { rows } = await query('SELECT * FROM password_resets WHERE email = $1', [email]);
+        if (rows.length === 0) return response(400, { error: "Invalid or expired request" });
+        
+        const resetRecord = rows[0];
+        
+        if (resetRecord.otp !== otp) {
+            return response(400, { error: "Invalid OTP code" });
+        }
+        
+        if (new Date(resetRecord.expires_at) < new Date()) {
+            return response(400, { error: "OTP has expired. Please request a new one." });
+        }
+
+        const passwordHash = hashPassword(newPassword);
+        
+        // Update user password and clear reset record
+        await query('UPDATE users SET password_hash = $1 WHERE email = $2', [passwordHash, email]);
+        await query('DELETE FROM password_resets WHERE email = $1', [email]);
+
+        return response(200, { success: true });
     }
 
     // --- USERS ---
@@ -278,7 +375,6 @@ export const handler = async (event: any) => {
     // --- MESSAGES ---
     if (cleanPath === 'messages') {
         if (method === 'GET') {
-            // Get all messages for standard operations (filtering done in frontend context or refined query if needed)
             const { rows } = await query('SELECT * FROM messages ORDER BY created_at ASC');
             const messages = rows.map((m: any) => ({
                 id: m.id,

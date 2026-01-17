@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { UserRole, User } from '../types';
 import { useApp } from '../context/AppContext';
-import { Recycle, Building2, Truck, User as UserIcon, ArrowLeft, AlertTriangle, Lock, Eye, EyeOff } from 'lucide-react';
+import { Recycle, Building2, Truck, User as UserIcon, ArrowLeft, AlertTriangle, Lock, Eye, EyeOff, KeyRound, Mail, CheckCircle } from 'lucide-react';
 
 interface AuthProps {
   onLogin: (userId: string) => void;
 }
 
-type AuthView = 'landing' | 'login' | 'signup_household' | 'signup_org';
+type AuthView = 'landing' | 'login' | 'signup_household' | 'signup_org' | 'forgot_password_request' | 'forgot_password_verify';
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
-  const { sysConfig, users, addUser, login } = useApp();
+  const { sysConfig, users, addUser, login, requestPasswordReset, resetPassword } = useApp();
   const [view, setView] = useState<AuthView>('landing');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -18,6 +18,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   
+  // Password Reset State
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetOtp, setResetOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+
   // Validation & Form State
   const [signupData, setSignupData] = useState({
       fullName: '',
@@ -28,6 +34,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       confirmPassword: ''
   });
   const [validationError, setValidationError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const resetForm = (targetView: AuthView) => {
@@ -41,7 +48,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       });
       setLoginEmail('');
       setLoginPassword('');
+      setResetEmail('');
+      setResetOtp('');
+      setNewPassword('');
+      setConfirmNewPassword('');
       setValidationError('');
+      setSuccessMessage('');
       setShowPassword(false);
       setView(targetView);
       setIsSubmitting(false);
@@ -76,6 +88,52 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         setValidationError(error.message || "Invalid email or password.");
         setIsSubmitting(false);
     }
+  };
+
+  const handleRequestReset = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setValidationError('');
+      setIsSubmitting(true);
+
+      try {
+          await requestPasswordReset(resetEmail);
+          setSuccessMessage("OTP sent! Check your email (or server console for demo).");
+          setTimeout(() => {
+              setSuccessMessage('');
+              setView('forgot_password_verify');
+              setIsSubmitting(false);
+          }, 1500);
+      } catch (error: any) {
+          setValidationError(error.message || "Failed to request OTP.");
+          setIsSubmitting(false);
+      }
+  };
+
+  const handleVerifyReset = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setValidationError('');
+      
+      if (newPassword !== confirmNewPassword) {
+          setValidationError("Passwords do not match.");
+          return;
+      }
+      if (newPassword.length < 8) {
+          setValidationError("Password must be at least 8 characters.");
+          return;
+      }
+
+      setIsSubmitting(true);
+
+      try {
+          await resetPassword(resetEmail, resetOtp, newPassword);
+          setSuccessMessage("Password reset successfully!");
+          setTimeout(() => {
+              resetForm('login');
+          }, 2000);
+      } catch (error: any) {
+          setValidationError(error.message || "Failed to reset password.");
+          setIsSubmitting(false);
+      }
   };
 
   const handleSignupSubmit = async (e: React.FormEvent, role: UserRole) => {
@@ -369,7 +427,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 <h2 className="text-2xl font-bold text-white mb-6">Welcome Back</h2>
                 
                 {validationError && (
-                    <div className="bg-red-500/80 text-white text-xs font-bold p-3 rounded-xl border border-red-400 backdrop-blur-sm flex items-center gap-2">
+                    <div className="bg-red-500/80 text-white text-xs font-bold p-3 rounded-xl border border-red-400 backdrop-blur-sm flex items-center gap-2 animate-pulse">
                         <AlertTriangle className="w-4 h-4 shrink-0" />
                         {validationError}
                     </div>
@@ -387,7 +445,16 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         />
                     </div>
                     <div>
-                        <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">Password</label>
+                        <div className="flex justify-between items-center mb-1">
+                            <label className="text-green-100 text-xs font-bold uppercase tracking-wide">Password</label>
+                            <button 
+                                type="button" 
+                                onClick={() => setView('forgot_password_request')}
+                                className="text-[10px] font-bold text-green-200 hover:text-white hover:underline"
+                            >
+                                Forgot Password?
+                            </button>
+                        </div>
                         <input 
                             type="password" 
                             value={loginPassword}
@@ -407,6 +474,124 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 </button>
             </form>
         )}
+
+        {/* FORGOT PASSWORD: STEP 1 (EMAIL) */}
+        {view === 'forgot_password_request' && (
+            <form onSubmit={handleRequestReset} className="w-full max-w-sm space-y-4 animate-fade-in-up bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 relative">
+                <button type="button" onClick={() => resetForm('login')} className="absolute top-4 left-4 text-white hover:text-green-200 transition-colors">
+                    <ArrowLeft className="w-6 h-6" />
+                </button>
+                <div className="text-center mb-6">
+                    <div className="inline-block p-3 bg-white/20 rounded-full mb-3 text-white shadow-inner">
+                        <KeyRound className="w-8 h-8" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-white">Reset Password</h2>
+                    <p className="text-green-100 text-xs mt-2">Enter your email to receive a One-Time Password (OTP)</p>
+                </div>
+
+                {validationError && (
+                    <div className="bg-red-500/80 text-white text-xs font-bold p-3 rounded-xl border border-red-400 backdrop-blur-sm animate-pulse">
+                        {validationError}
+                    </div>
+                )}
+                
+                {successMessage && (
+                    <div className="bg-green-500/80 text-white text-xs font-bold p-3 rounded-xl border border-green-400 backdrop-blur-sm flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4" /> {successMessage}
+                    </div>
+                )}
+
+                <div className="text-left">
+                    <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">Email Address</label>
+                    <div className="relative">
+                        <input 
+                            type="email" 
+                            value={resetEmail}
+                            onChange={(e) => setResetEmail(e.target.value)}
+                            className="w-full p-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder-green-100/50 focus:outline-none focus:bg-white/30 focus:border-white/50 transition-all pl-10" 
+                            placeholder="you@example.com"
+                            required 
+                        />
+                        <Mail className="absolute left-3 top-3.5 w-5 h-5 text-green-200/50" />
+                    </div>
+                </div>
+
+                <button 
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full bg-white text-green-800 py-3 rounded-xl font-bold shadow-lg hover:bg-green-50 transition-transform active:scale-95 mt-4 disabled:opacity-70"
+                >
+                    {isSubmitting ? 'Sending...' : 'Send OTP'}
+                </button>
+            </form>
+        )}
+
+        {/* FORGOT PASSWORD: STEP 2 (OTP & NEW PASS) */}
+        {view === 'forgot_password_verify' && (
+            <form onSubmit={handleVerifyReset} className="w-full max-w-sm space-y-4 animate-fade-in-up bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 relative">
+                <button type="button" onClick={() => setView('forgot_password_request')} className="absolute top-4 left-4 text-white hover:text-green-200 transition-colors">
+                    <ArrowLeft className="w-6 h-6" />
+                </button>
+                <div className="text-center mb-6">
+                    <h2 className="text-2xl font-bold text-white">Verify & Reset</h2>
+                    <p className="text-green-100 text-xs mt-2">Enter the code sent to <span className="font-bold">{resetEmail}</span></p>
+                </div>
+
+                {validationError && (
+                    <div className="bg-red-500/80 text-white text-xs font-bold p-3 rounded-xl border border-red-400 backdrop-blur-sm animate-pulse">
+                        {validationError}
+                    </div>
+                )}
+                {successMessage && (
+                    <div className="bg-green-500/80 text-white text-xs font-bold p-3 rounded-xl border border-green-400 backdrop-blur-sm flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4" /> {successMessage}
+                    </div>
+                )}
+
+                <div className="text-left space-y-3">
+                    <div>
+                        <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">6-Digit OTP</label>
+                        <input 
+                            type="text" 
+                            value={resetOtp}
+                            onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            className="w-full p-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder-green-100/50 focus:outline-none focus:bg-white/30 focus:border-white/50 transition-all text-center tracking-[0.5em] font-bold text-lg" 
+                            placeholder="000000"
+                            required 
+                        />
+                    </div>
+                    <div>
+                        <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">New Password</label>
+                        <input 
+                            type="password" 
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            className="w-full p-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder-green-100/50 focus:outline-none focus:bg-white/30 focus:border-white/50 transition-all" 
+                            required 
+                        />
+                    </div>
+                    <div>
+                        <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">Confirm New Password</label>
+                        <input 
+                            type="password" 
+                            value={confirmNewPassword}
+                            onChange={(e) => setConfirmNewPassword(e.target.value)}
+                            className="w-full p-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder-green-100/50 focus:outline-none focus:bg-white/30 focus:border-white/50 transition-all" 
+                            required 
+                        />
+                    </div>
+                </div>
+
+                <button 
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full bg-white text-green-800 py-3 rounded-xl font-bold shadow-lg hover:bg-green-50 transition-transform active:scale-95 mt-4 disabled:opacity-70"
+                >
+                    {isSubmitting ? 'Resetting...' : 'Reset Password'}
+                </button>
+            </form>
+        )}
+
       </div>
     </div>
   );

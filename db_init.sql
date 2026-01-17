@@ -19,6 +19,13 @@ CREATE TABLE IF NOT EXISTS users (
 -- Ensure password_hash column exists (Migration for existing tables)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 
+-- Password Resets Table
+CREATE TABLE IF NOT EXISTS password_resets (
+    email VARCHAR(255) PRIMARY KEY,
+    otp VARCHAR(10) NOT NULL,
+    expires_at TIMESTAMP NOT NULL
+);
+
 -- Pickups Table
 CREATE TABLE IF NOT EXISTS pickups (
     id VARCHAR(255) PRIMARY KEY,
