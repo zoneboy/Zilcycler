@@ -58,6 +58,9 @@ export interface User {
   email?: string;
   phone?: string;
   bankDetails?: BankDetails;
+  gender?: string;
+  address?: string;
+  industry?: string;
 }
 
 export interface PickupTask {

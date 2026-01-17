@@ -91,6 +91,9 @@ export const handler = async (event: any) => {
             zointsBalance: parseFloat(user.zoints_balance),
             totalRecycledKg: parseFloat(user.total_recycled_kg),
             isActive: user.is_active,
+            gender: user.gender,
+            address: user.address,
+            industry: user.industry,
             bankDetails: {
                 bankName: user.bank_name,
                 accountNumber: user.account_number,
@@ -167,8 +170,8 @@ export const handler = async (event: any) => {
         // 2. Create User
         const passwordHash = hashPassword(password);
         await query(
-            `INSERT INTO users (id, name, email, role, phone, avatar, password_hash) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [user.id, user.name, user.email, user.role, user.phone, user.avatar, passwordHash]
+            `INSERT INTO users (id, name, email, role, phone, avatar, password_hash, gender, address, industry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [user.id, user.name, user.email, user.role, user.phone, user.avatar, passwordHash, user.gender, user.address, user.industry]
         );
 
         // 3. Clean up OTP
@@ -291,7 +294,7 @@ export const handler = async (event: any) => {
     // --- USERS ---
     if (cleanPath === 'users') {
       if (method === 'GET') {
-        const { rows } = await query('SELECT id, name, email, role, phone, avatar, zoints_balance, total_recycled_kg, is_active, bank_name, account_number, account_name, created_at FROM users');
+        const { rows } = await query('SELECT id, name, email, role, phone, avatar, zoints_balance, total_recycled_kg, is_active, gender, address, industry, bank_name, account_number, account_name, created_at FROM users');
         const users = rows.map((u: any) => ({
             ...u,
             zointsBalance: parseFloat(u.zoints_balance),
@@ -306,12 +309,12 @@ export const handler = async (event: any) => {
         return response(200, users);
       }
       if (method === 'POST') {
-        const { id, name, email, role, phone, password } = body;
+        const { id, name, email, role, phone, password, gender, address, industry } = body;
         const passwordHash = password ? hashPassword(password) : null;
 
         await query(
-            `INSERT INTO users (id, name, email, role, phone, avatar, password_hash) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [id, name, email, role, phone, `https://i.pravatar.cc/150?u=${id}`, passwordHash]
+            `INSERT INTO users (id, name, email, role, phone, avatar, password_hash, gender, address, industry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [id, name, email, role, phone, `https://i.pravatar.cc/150?u=${id}`, passwordHash, gender, address, industry]
         );
         return response(201, { message: "User created" });
       }
@@ -319,6 +322,17 @@ export const handler = async (event: any) => {
           const { id, updates } = body;
           if (updates.isActive !== undefined) await query('UPDATE users SET is_active = $1 WHERE id = $2', [updates.isActive, id]);
           if (updates.zointsBalance !== undefined) await query('UPDATE users SET zoints_balance = $1 WHERE id = $2', [updates.zointsBalance, id]);
+          if (updates.gender !== undefined) await query('UPDATE users SET gender = $1 WHERE id = $2', [updates.gender, id]);
+          if (updates.address !== undefined) await query('UPDATE users SET address = $1 WHERE id = $2', [updates.address, id]);
+          if (updates.industry !== undefined) await query('UPDATE users SET industry = $1 WHERE id = $2', [updates.industry, id]);
+          if (updates.name !== undefined) await query('UPDATE users SET name = $1 WHERE id = $2', [updates.name, id]);
+          if (updates.phone !== undefined) await query('UPDATE users SET phone = $1 WHERE id = $2', [updates.phone, id]);
+          if (updates.bankDetails) {
+              await query(
+                  'UPDATE users SET bank_name = $1, account_number = $2, account_name = $3 WHERE id = $4',
+                  [updates.bankDetails.bankName, updates.bankDetails.accountNumber, updates.bankDetails.accountName, id]
+              );
+          }
           return response(200, { success: true });
       }
     }

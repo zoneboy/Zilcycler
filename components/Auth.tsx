@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserRole, User } from '../types';
 import { useApp } from '../context/AppContext';
-import { Recycle, Building2, Truck, User as UserIcon, ArrowLeft, AlertTriangle, Lock, Eye, EyeOff, KeyRound, Mail, CheckCircle } from 'lucide-react';
+import { Recycle, Building2, Truck, User as UserIcon, ArrowLeft, AlertTriangle, Lock, Eye, EyeOff, KeyRound, Mail, CheckCircle, ChevronDown } from 'lucide-react';
 
 interface AuthProps {
   onLogin: (userId: string) => void;
@@ -33,7 +33,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       fullName: '',
       email: '',
       phone: '',
-      specific: '', // Holds Address for Household, Industry for Org
+      gender: '',
+      address: '',
+      industry: '',
       password: '',
       confirmPassword: ''
   });
@@ -47,7 +49,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           fullName: '',
           email: '',
           phone: '',
-          specific: '',
+          gender: '',
+          address: '',
+          industry: '',
           password: '',
           confirmPassword: ''
       });
@@ -216,6 +220,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           phone: signupData.phone,
           role: signupData.role,
           avatar: `https://i.pravatar.cc/150?u=${signupData.email}`,
+          gender: signupData.gender,
+          address: signupData.address,
+          industry: signupData.industry, // Only used if Organization
           zointsBalance: 0,
           isActive: true,
           totalRecycledKg: 0
@@ -291,7 +298,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     </div>
   );
 
-  const renderSignupForm = (role: UserRole, title: string, icon: React.ReactNode, specificLabel: string, specificPlaceholder: string, isSelect: boolean = false) => (
+  const renderSignupForm = (role: UserRole, title: string, icon: React.ReactNode) => (
     <form onSubmit={(e) => handleSignupSubmit(e, role)} className="w-full max-w-sm space-y-4 animate-fade-in-up bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 relative">
         <button type="button" onClick={() => resetForm('landing')} className="absolute top-4 left-4 text-white hover:text-green-200 transition-colors">
             <ArrowLeft className="w-6 h-6" />
@@ -347,33 +354,63 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 />
             </div>
 
-            {/* Specific Field (Address or Industry) */}
+            {/* Gender Field */}
             <div>
-                <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">{specificLabel}</label>
-                {isSelect ? (
+                <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">
+                    {role === UserRole.HOUSEHOLD ? 'Gender' : 'Rep Gender'}
+                </label>
+                <div className="relative">
                     <select 
-                        value={signupData.specific}
-                        onChange={(e) => setSignupData({...signupData, specific: e.target.value})}
-                        className="w-full p-3 rounded-xl bg-white/20 border border-white/30 text-white focus:outline-none focus:bg-white/30 focus:border-white/50 transition-all [&>option]:text-black"
+                        value={signupData.gender}
+                        onChange={(e) => setSignupData({...signupData, gender: e.target.value})}
+                        className="w-full p-3 rounded-xl bg-white/20 border border-white/30 text-white focus:outline-none focus:bg-white/30 focus:border-white/50 transition-all appearance-none [&>option]:text-black"
                         required
                     >
-                        <option value="">{specificPlaceholder}</option>
-                        <option value="retail">Retail</option>
-                        <option value="manufacturing">Manufacturing</option>
-                        <option value="corporate">Corporate Office</option>
-                        <option value="education">Education</option>
-                        <option value="hospitality">Hospitality</option>
+                        <option value="">Select Gender</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
                     </select>
-                ) : (
-                    <input 
-                        type="text" 
-                        value={signupData.specific}
-                        onChange={(e) => setSignupData({...signupData, specific: e.target.value})}
-                        className="w-full p-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder-green-100/50 focus:outline-none focus:bg-white/30 focus:border-white/50 transition-all" 
-                        required 
-                    />
-                )}
+                    <ChevronDown className="absolute right-4 top-3.5 w-5 h-5 text-white/70 pointer-events-none" />
+                </div>
             </div>
+
+            {/* Address Field */}
+            <div>
+                <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">
+                    {role === UserRole.HOUSEHOLD ? 'Home Address' : 'Company Address'}
+                </label>
+                <input 
+                    type="text" 
+                    value={signupData.address}
+                    onChange={(e) => setSignupData({...signupData, address: e.target.value})}
+                    className="w-full p-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder-green-100/50 focus:outline-none focus:bg-white/30 focus:border-white/50 transition-all" 
+                    required 
+                />
+            </div>
+
+            {/* Industry Field (Organizations Only) */}
+            {role === UserRole.ORGANIZATION && (
+                <div>
+                    <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">Industry Type</label>
+                    <div className="relative">
+                        <select 
+                            value={signupData.industry}
+                            onChange={(e) => setSignupData({...signupData, industry: e.target.value})}
+                            className="w-full p-3 rounded-xl bg-white/20 border border-white/30 text-white focus:outline-none focus:bg-white/30 focus:border-white/50 transition-all appearance-none [&>option]:text-black"
+                            required
+                        >
+                            <option value="">Select Industry</option>
+                            <option value="retail">Retail</option>
+                            <option value="manufacturing">Manufacturing</option>
+                            <option value="corporate">Corporate Office</option>
+                            <option value="education">Education</option>
+                            <option value="hospitality">Hospitality</option>
+                        </select>
+                        <ChevronDown className="absolute right-4 top-3.5 w-5 h-5 text-white/70 pointer-events-none" />
+                    </div>
+                </div>
+            )}
 
             {/* Password Fields */}
             <div>
@@ -437,9 +474,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
         {view === 'landing' && renderLanding()}
 
-        {view === 'signup_household' && renderSignupForm(UserRole.HOUSEHOLD, 'Household Join', <UserIcon className="w-8 h-8"/>, 'Home Address', '123 Green St, Lagos')}
+        {view === 'signup_household' && renderSignupForm(UserRole.HOUSEHOLD, 'Household Join', <UserIcon className="w-8 h-8"/>)}
 
-        {view === 'signup_org' && renderSignupForm(UserRole.ORGANIZATION, 'Organization Join', <Building2 className="w-8 h-8"/>, 'Industry Type', 'Select Industry', true)}
+        {view === 'signup_org' && renderSignupForm(UserRole.ORGANIZATION, 'Organization Join', <Building2 className="w-8 h-8"/>)}
 
         {/* SIGNUP VERIFICATION */}
         {view === 'signup_verify' && (

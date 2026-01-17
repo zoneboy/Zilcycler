@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
+import { useApp } from '../context/AppContext';
 import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, AlertCircle, ArrowLeft, Save, Lock, Eye, EyeOff, Check, Globe, Trash2, AlertTriangle, Landmark } from 'lucide-react';
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 type SettingsView = 'MAIN' | 'ACCOUNT' | 'PRIVACY';
 
 const Settings: React.FC<Props> = ({ user, onLogout }) => {
+  const { updateUser } = useApp();
   const [currentView, setCurrentView] = useState<SettingsView>('MAIN');
   const [notifications, setNotifications] = useState(true);
   
@@ -30,8 +32,8 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     name: user.name,
     email: user.email || '',
     phone: user.phone || '',
-    gender: 'Female',
-    address: '123 Green Avenue, Lagos',
+    gender: user.gender || '',
+    address: user.address || '',
     bankName: user.bankDetails?.bankName || '',
     accountNumber: user.bankDetails?.accountNumber || '',
     accountName: user.bankDetails?.accountName || ''
@@ -57,6 +59,19 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
   const handleSaveAccount = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
+    
+    updateUser(user.id, {
+        name: formData.name,
+        phone: formData.phone,
+        gender: formData.gender,
+        address: formData.address,
+        bankDetails: {
+            bankName: formData.bankName,
+            accountNumber: formData.accountNumber,
+            accountName: formData.accountName
+        }
+    });
+
     setTimeout(() => {
         setIsSaving(false);
         alert("Profile updated successfully!");
@@ -213,8 +228,8 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
                     <input 
                         type="email" 
                         value={formData.email}
-                        onChange={(e) => setFormData({...formData, email: e.target.value})}
-                        className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-green-500 dark:text-white transition-colors font-medium"
+                        readOnly
+                        className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none dark:text-white transition-colors font-medium opacity-70 cursor-not-allowed"
                     />
                 </div>
                  <div>

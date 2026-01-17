@@ -13,11 +13,18 @@ CREATE TABLE IF NOT EXISTS users (
     bank_name VARCHAR(100),
     account_number VARCHAR(50),
     account_name VARCHAR(255),
+    gender VARCHAR(50),
+    address TEXT,
+    industry VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Ensure password_hash column exists (Migration for existing tables)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+-- New Columns Migration
+ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(50);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS industry VARCHAR(100);
 
 -- Password Resets Table
 CREATE TABLE IF NOT EXISTS password_resets (
