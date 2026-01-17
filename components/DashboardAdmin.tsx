@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, UserRole, WasteRates, PickupTask, RedemptionRequest, BlogPost } from '../types';
 import { useApp } from '../context/AppContext';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
-import { Users, Settings, LogOut, ArrowLeft, Ban, CheckCircle, ShieldAlert, Save, Coins, Search, Mail, Phone, ChevronRight, Truck, Calendar, ArrowDownUp, X, Filter, MapPin, Package, User as UserIcon, AlertTriangle, ImageIcon, Download, Loader2, Scale, FileText, Banknote, Lock, Landmark, UserPlus, BookOpen, Trash2, Plus, Image as ImageIcon2 } from 'lucide-react';
+import { Users, Settings, LogOut, ArrowLeft, Ban, CheckCircle, ShieldAlert, Save, Coins, Search, Mail, Phone, ChevronRight, Truck, Calendar, ArrowDownUp, X, Filter, MapPin, Package, User as UserIcon, AlertTriangle, ImageIcon, Download, Loader2, Scale, FileText, Banknote, Lock, Landmark, UserPlus, BookOpen, Trash2, Plus, Image as ImageIcon2, Shield } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -24,9 +24,10 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
   const [userSearch, setUserSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   
-  // Add Collector State
-  const [isAddCollectorOpen, setIsAddCollectorOpen] = useState(false);
-  const [newCollector, setNewCollector] = useState({ name: '', email: '', phone: '', password: '' });
+  // Add User State (Collector/Staff)
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [addingRole, setAddingRole] = useState<UserRole>(UserRole.COLLECTOR);
+  const [newUserForm, setNewUserForm] = useState({ name: '', email: '', phone: '', password: '' });
   
   // Pickup Management State
   const [pickupFilter, setPickupFilter] = useState('ALL');
@@ -111,26 +112,33 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       }, 600);
   };
 
-  const handleAddCollector = (e: React.FormEvent) => {
+  const openAddUserModal = (role: UserRole) => {
+      setAddingRole(role);
+      setNewUserForm({ name: '', email: '', phone: '', password: '' });
+      setIsAddUserOpen(true);
+  };
+
+  const handleAddUser = (e: React.FormEvent) => {
       e.preventDefault();
       const newUser: User = {
           id: `u_${Math.random().toString(36).substr(2, 9)}`,
-          name: newCollector.name,
-          email: newCollector.email,
-          phone: newCollector.phone,
-          role: UserRole.COLLECTOR,
-          avatar: `https://i.pravatar.cc/150?u=${newCollector.email}`,
+          name: newUserForm.name,
+          email: newUserForm.email,
+          phone: newUserForm.phone,
+          role: addingRole,
+          avatar: `https://i.pravatar.cc/150?u=${newUserForm.email}`,
           zointsBalance: 0,
           isActive: true,
           totalRecycledKg: 0
       };
-      addUser(newUser);
-      setIsAddCollectorOpen(false);
+      // Pass password to context for creation
+      addUser(newUser, newUserForm.password);
+      setIsAddUserOpen(false);
       
-      // Notify Admin of credentials to share
-      alert(`Collector Account Created!\n\nName: ${newCollector.name}\nEmail: ${newCollector.email}\nPassword: ${newCollector.password}\n\nPlease share these credentials securely with the collector.`);
+      const roleName = addingRole === UserRole.COLLECTOR ? 'Collector' : 'Staff';
+      alert(`${roleName} Account Created!\n\nName: ${newUserForm.name}\nEmail: ${newUserForm.email}\nPassword: ${newUserForm.password}\n\nPlease share these credentials securely.`);
       
-      setNewCollector({ name: '', email: '', phone: '', password: '' });
+      setNewUserForm({ name: '', email: '', phone: '', password: '' });
   };
 
   const handleAddTip = (e: React.FormEvent) => {
@@ -978,10 +986,16 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                    <option value={UserRole.STAFF}>Staff</option>
                </select>
                <button 
-                  onClick={() => setIsAddCollectorOpen(true)}
+                  onClick={() => openAddUserModal(UserRole.COLLECTOR)}
                   className="bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-black transition-colors whitespace-nowrap"
                >
                    <UserPlus className="w-4 h-4" /> Add Collector
+               </button>
+               <button 
+                  onClick={() => openAddUserModal(UserRole.STAFF)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors whitespace-nowrap"
+               >
+                   <Shield className="w-4 h-4" /> Add Staff
                </button>
            </div>
         </div>
@@ -1014,33 +1028,35 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
             ))}
         </div>
 
-        {/* Add Collector Modal */}
-        {isAddCollectorOpen && (
+        {/* Add User Modal (Generalized for Collector and Staff) */}
+        {isAddUserOpen && (
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsAddCollectorOpen(false)}></div>
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsAddUserOpen(false)}></div>
                 <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up p-6">
                     <div className="flex justify-between items-center mb-6">
-                        <h3 className="font-bold text-gray-900">Add New Collector</h3>
-                        <button onClick={() => setIsAddCollectorOpen(false)} className="p-2 bg-gray-100 rounded-full">
+                        <h3 className="font-bold text-gray-900">Add New {addingRole === UserRole.COLLECTOR ? 'Collector' : 'Staff'}</h3>
+                        <button onClick={() => setIsAddUserOpen(false)} className="p-2 bg-gray-100 rounded-full">
                             <X className="w-5 h-5 text-gray-600" />
                         </button>
                     </div>
-                    <form onSubmit={handleAddCollector} className="space-y-4">
+                    <form onSubmit={handleAddUser} className="space-y-4">
                         <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Company Name</label>
-                            <input required type="text" value={newCollector.name} onChange={e => setNewCollector({...newCollector, name: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:border-green-500" />
+                            <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">
+                                {addingRole === UserRole.COLLECTOR ? 'Company Name' : 'Full Name'}
+                            </label>
+                            <input required type="text" value={newUserForm.name} onChange={e => setNewUserForm({...newUserForm, name: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:border-green-500" />
                         </div>
                         <div>
                             <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Email</label>
-                            <input required type="email" value={newCollector.email} onChange={e => setNewCollector({...newCollector, email: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:border-green-500" />
+                            <input required type="email" value={newUserForm.email} onChange={e => setNewUserForm({...newUserForm, email: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:border-green-500" />
                         </div>
                          <div>
                             <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Phone</label>
-                            <input required type="tel" value={newCollector.phone} onChange={e => setNewCollector({...newCollector, phone: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:border-green-500" />
+                            <input required type="tel" value={newUserForm.phone} onChange={e => setNewUserForm({...newUserForm, phone: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:border-green-500" />
                         </div>
                         <div>
                             <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Temporary Password</label>
-                            <input required type="text" value={newCollector.password} onChange={e => setNewCollector({...newCollector, password: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:border-green-500" />
+                            <input required type="text" value={newUserForm.password} onChange={e => setNewUserForm({...newUserForm, password: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:border-green-500" />
                         </div>
                         <button type="submit" className="w-full py-4 bg-green-700 text-white font-bold rounded-xl shadow-lg hover:bg-green-800 transition-transform active:scale-95">Create Account</button>
                     </form>
