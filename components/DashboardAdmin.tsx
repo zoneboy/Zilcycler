@@ -236,6 +236,42 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       document.body.removeChild(link);
   };
 
+  const handleExportUsers = (data: User[]) => {
+      // CSV Header
+      let csvContent = "data:text/csv;charset=utf-8,ID,Name,Role,Email,Phone,Gender,Address,Industry,Status,Balance (Z),Total Recycled (kg),ESG Score,Bank Name,Account Number,Account Name\n";
+      
+      // CSV Rows
+      data.forEach(u => {
+          const row = [
+              u.id,
+              `"${u.name.replace(/"/g, '""')}"`,
+              u.role,
+              `"${(u.email || '').replace(/"/g, '""')}"`,
+              `"${(u.phone || '').replace(/"/g, '""')}"`,
+              u.gender || '',
+              `"${(u.address || '').replace(/"/g, '""')}"`,
+              u.industry || '',
+              u.isActive ? 'Active' : 'Suspended',
+              u.zointsBalance,
+              u.totalRecycledKg || 0,
+              u.esgScore || '',
+              `"${(u.bankDetails?.bankName || '').replace(/"/g, '""')}"`,
+              `"\t${u.bankDetails?.accountNumber || ''}"`, // Force text format for account numbers in Excel
+              `"${(u.bankDetails?.accountName || '').replace(/"/g, '""')}"`
+          ].join(",");
+          csvContent += row + "\n";
+      });
+
+      // Download
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `users_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
+
   const handleDateSelect = (dateString: string) => {
       if (!dateString) return;
       
@@ -1146,6 +1182,12 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                    <option value={UserRole.COLLECTOR}>Collector</option>
                    <option value={UserRole.STAFF}>Staff</option>
                </select>
+               <button 
+                  onClick={() => handleExportUsers(filteredUsers)}
+                  className="bg-purple-100 text-purple-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-purple-200 transition-colors whitespace-nowrap"
+               >
+                   <Download className="w-4 h-4" /> Export
+               </button>
                <button 
                   onClick={() => openAddUserModal(UserRole.COLLECTOR)}
                   className="bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-black transition-colors whitespace-nowrap"
