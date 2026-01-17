@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { UserRole } from '../types';
+import { UserRole, User } from '../types';
 import { useApp } from '../context/AppContext';
-import { Recycle, Building2, Truck, User, ArrowLeft, AlertTriangle, Lock, Eye, EyeOff } from 'lucide-react';
+import { Recycle, Building2, Truck, User as UserIcon, ArrowLeft, AlertTriangle, Lock, Eye, EyeOff } from 'lucide-react';
 
 interface AuthProps {
   onLogin: (userId: string) => void;
@@ -10,8 +10,9 @@ interface AuthProps {
 type AuthView = 'landing' | 'login' | 'signup_household' | 'signup_org';
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
-  const { sysConfig, users } = useApp();
+  const { sysConfig, users, addUser } = useApp();
   const [view, setView] = useState<AuthView>('landing');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Login Form State
   const [loginEmail, setLoginEmail] = useState('');
@@ -43,6 +44,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       setValidationError('');
       setShowPassword(false);
       setView(targetView);
+      setIsSubmitting(false);
   };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -50,7 +52,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setValidationError('');
     
     // 1. Find user by email (Simple auth for live deployment based on existing DB)
-    // Note: In a full production env, password hashing should be verified on backend.
     const foundUser = users.find(u => u.email?.toLowerCase() === loginEmail.toLowerCase());
 
     if (!foundUser) {
@@ -74,12 +75,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     onLogin(foundUser.id);
   };
 
-  const handleSignupSubmit = (e: React.FormEvent, role: UserRole) => {
+  const handleSignupSubmit = async (e: React.FormEvent, role: UserRole) => {
     e.preventDefault();
     setValidationError('');
+    setIsSubmitting(true);
 
     if (sysConfig.maintenanceMode) {
          setValidationError("Cannot register while system is under maintenance.");
+         setIsSubmitting(false);
          return;
     }
 
@@ -87,40 +90,64 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     const phoneRegex = /^[0-9+\-\s()]{10,}$/;
     if (!phoneRegex.test(signupData.phone)) {
         setValidationError("Please enter a valid phone number (min 10 digits).");
+        setIsSubmitting(false);
         return;
     }
 
     // 2. Password Strength Validation
     if (signupData.password.length < 8) {
         setValidationError("Password must be at least 8 characters long.");
+        setIsSubmitting(false);
         return;
     }
     if (!/\d/.test(signupData.password)) {
         setValidationError("Password must include at least one number.");
+        setIsSubmitting(false);
         return;
     }
     if (!/[!@#$%^&*(),.?":{}|<>]/.test(signupData.password)) {
         setValidationError("Password must include at least one special symbol.");
+        setIsSubmitting(false);
         return;
     }
 
     // 3. Confirm Password Match
     if (signupData.password !== signupData.confirmPassword) {
         setValidationError("Passwords do not match.");
+        setIsSubmitting(false);
         return;
     }
 
     // Check if email already exists
     if (users.some(u => u.email?.toLowerCase() === signupData.email.toLowerCase())) {
         setValidationError("Email already registered. Please login.");
+        setIsSubmitting(false);
         return;
     }
 
-    // Since this is a live deployment request but backend signup logic wasn't fully mocked in previous prompt,
-    // we alert the user that this action would normally hit the API.
-    // Ideally, pass this data to AppContext.addUser, then log them in.
-    alert("Registration successful! Please log in.");
-    setView('login');
+    // Construct new user object
+    const newUser: User = {
+        id: `u_${Date.now().toString(36)}`,
+        name: signupData.fullName,
+        email: signupData.email,
+        phone: signupData.phone,
+        role: role,
+        avatar: `https://i.pravatar.cc/150?u=${signupData.email}`,
+        zointsBalance: 0,
+        isActive: true,
+        totalRecycledKg: 0
+        // Note: Password/Address fields are not currently stored in the simple User table schema
+    };
+
+    try {
+        await addUser(newUser);
+        alert("Registration successful! Please log in.");
+        resetForm('login');
+    } catch (error) {
+        console.error("Signup failed", error);
+        setValidationError("Failed to create account. Please try again.");
+        setIsSubmitting(false);
+    }
   };
 
   const handleSignupClick = (targetView: AuthView) => {
@@ -152,7 +179,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             : 'bg-white text-green-800 hover:bg-green-50'
         }`}
       >
-        {!sysConfig.allowRegistrations ? <Lock className="w-5 h-5" /> : <User className="w-5 h-5" />}
+        {!sysConfig.allowRegistrations ? <Lock className="w-5 h-5" /> : <UserIcon className="w-5 h-5" />}
         {!sysConfig.allowRegistrations ? 'Signups Paused' : 'Sign Up as Household'}
       </button>
 
@@ -301,9 +328,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
         <button 
             type="submit"
-            className="w-full bg-white text-green-800 py-3 rounded-xl font-bold shadow-lg hover:bg-green-50 transition-transform active:scale-95 mt-6"
+            disabled={isSubmitting}
+            className="w-full bg-white text-green-800 py-3 rounded-xl font-bold shadow-lg hover:bg-green-50 transition-transform active:scale-95 mt-6 disabled:opacity-70 disabled:active:scale-100"
         >
-            Create Account
+            {isSubmitting ? 'Creating Account...' : 'Create Account'}
         </button>
     </form>
   );
@@ -326,7 +354,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
         {view === 'landing' && renderLanding()}
 
-        {view === 'signup_household' && renderSignupForm(UserRole.HOUSEHOLD, 'Household Join', <User className="w-8 h-8"/>, 'Home Address', '123 Green St, Lagos')}
+        {view === 'signup_household' && renderSignupForm(UserRole.HOUSEHOLD, 'Household Join', <UserIcon className="w-8 h-8"/>, 'Home Address', '123 Green St, Lagos')}
 
         {view === 'signup_org' && renderSignupForm(UserRole.ORGANIZATION, 'Organization Join', <Building2 className="w-8 h-8"/>, 'Industry Type', 'Select Industry', true)}
 
