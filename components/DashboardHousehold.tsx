@@ -10,7 +10,7 @@ interface Props {
 }
 
 const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
-  const { getPickupsByRole, blogPosts } = useApp();
+  const { getPickupsByRole, blogPosts, wasteRates } = useApp();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   // Get real pickup counts and derive stats
@@ -24,6 +24,45 @@ const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
 
   const displayRecycled = (user.totalRecycledKg || 0) + sessionRecycledKg;
   const displayZoints = user.zointsBalance + sessionZoints;
+
+  // Calculate Dynamic CO2 Saved
+  // Note: This calculates based on current session pickups + historical estimates if details missing
+  const calculateTotalCO2 = () => {
+      let co2 = 0;
+      
+      // 1. Calculate from detailed current session pickups
+      completedPickups.forEach(p => {
+          if (p.collectionDetails) {
+              p.collectionDetails.forEach(d => {
+                  const rate = wasteRates[d.category]?.co2 || 0.5; // Default 0.5 if not found
+                  co2 += d.weight * rate;
+              });
+          } else if (p.weight) {
+              // Fallback for simple pickups (estimate using 'Other' or average)
+              const cat = p.items.split(',')[0].trim();
+              const matchedKey = Object.keys(wasteRates).find(k => cat.includes(k));
+              const rate = matchedKey ? wasteRates[matchedKey].co2 : 0.5;
+              co2 += p.weight * rate;
+          }
+      });
+
+      // 2. Add historical data estimate
+      // Since historical data might just be totalRecycledKg without breakdown in user object, 
+      // or provided via recycledBreakdown array.
+      if (user.recycledBreakdown) {
+          user.recycledBreakdown.forEach(item => {
+              const rate = wasteRates[item.category]?.co2 || 0.5;
+              co2 += item.weight * rate;
+          });
+      } else {
+          // If no breakdown, assume a blended average (e.g. 1.0)
+          co2 += (user.totalRecycledKg || 0) * 1.0; 
+      }
+
+      return co2;
+  };
+
+  const totalCO2Saved = calculateTotalCO2();
 
   // Get the latest tip for the dashboard teaser
   const latestTip = blogPosts.length > 0 ? blogPosts[0] : null;
@@ -45,8 +84,7 @@ const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
               });
           } else if (p.weight) {
                // Fallback if no details but weight exists (legacy data or simple entry)
-               // Assign to 'Other' or deduce from string
-               const cat = p.items.split(',')[0] || 'Other'; 
+               const cat = p.items.split(',')[0].trim() || 'Other'; 
                const current = breakdownMap.get(cat) || 0;
                breakdownMap.set(cat, current + p.weight);
           }
@@ -104,7 +142,7 @@ const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
                 <span className="text-xs font-bold uppercase tracking-wide">CO₂ Saved</span>
              </div>
              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-gray-900 dark:text-white">{(displayRecycled * 1.5).toFixed(1)}</span>
+                <span className="text-2xl font-bold text-gray-900 dark:text-white">{totalCO2Saved.toFixed(1)}</span>
                 <span className="text-sm font-medium text-gray-400">kg</span>
              </div>
         </div>

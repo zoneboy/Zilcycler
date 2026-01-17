@@ -13,7 +13,7 @@ interface Props {
 const COLORS = ['#4ade80', '#60a5fa', '#facc15', '#94a3b8', '#fb7185', '#a78bfa'];
 
 const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
-  const { getPickupsByRole, blogPosts } = useApp();
+  const { getPickupsByRole, blogPosts, wasteRates } = useApp();
   const [showAnalytics, setShowAnalytics] = useState(false);
 
   // Dynamic Calculations
@@ -23,6 +23,42 @@ const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
   const earnedZoints = completedPickups.reduce((sum, p) => sum + (p.earnedZoints || 0), 0);
   const currentBalance = user.zointsBalance + earnedZoints;
   const totalRecycled = (user.totalRecycledKg || 0) + completedPickups.reduce((sum, p) => sum + (p.weight || 0), 0);
+
+  // Dynamic CO2 Calculation
+  const calculateTotalCO2 = () => {
+      let co2 = 0;
+      
+      // 1. Calculate from detailed current session pickups
+      completedPickups.forEach(p => {
+          if (p.collectionDetails) {
+              p.collectionDetails.forEach(d => {
+                  const rate = wasteRates[d.category]?.co2 || 0.5; 
+                  co2 += d.weight * rate;
+              });
+          } else if (p.weight) {
+              // Fallback
+              const cat = p.items.split(',')[0].trim();
+              const matchedKey = Object.keys(wasteRates).find(k => cat.includes(k));
+              const rate = matchedKey ? wasteRates[matchedKey].co2 : 0.5;
+              co2 += p.weight * rate;
+          }
+      });
+
+      // 2. Add historical data estimate
+      if (user.recycledBreakdown) {
+          user.recycledBreakdown.forEach(item => {
+              const rate = wasteRates[item.category]?.co2 || 0.5;
+              co2 += item.weight * rate;
+          });
+      } else {
+          // Fallback based on total historical
+          co2 += (user.totalRecycledKg || 0) * 1.0; 
+      }
+
+      return co2;
+  };
+
+  const totalCO2Saved = calculateTotalCO2();
 
   // Get the latest tip for the dashboard teaser
   const latestTip = blogPosts.length > 0 ? blogPosts[0] : null;
@@ -80,7 +116,7 @@ const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
                        <h2 className="text-4xl font-bold mb-4">{totalRecycled.toLocaleString()} kg</h2>
                        <div className="flex gap-4">
                            <div>
-                               <span className="text-2xl font-bold block text-green-400">{(totalRecycled * 1.2 / 1000).toFixed(1)}t</span>
+                               <span className="text-2xl font-bold block text-green-400">{totalCO2Saved.toFixed(1)}t</span>
                                <span className="text-xs text-purple-200">CO2 Saved</span>
                            </div>
                            <div>

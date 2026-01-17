@@ -32,8 +32,13 @@ export interface CollectionItem {
   earned: number;
 }
 
+export interface WasteTypeDetails {
+    rate: number; // Zoints per kg
+    co2: number; // CO2 saved per kg
+}
+
 export interface WasteRates {
-  [category: string]: number;
+  [category: string]: WasteTypeDetails;
 }
 
 export interface SystemConfig {

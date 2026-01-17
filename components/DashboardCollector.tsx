@@ -34,10 +34,11 @@ const DashboardCollector: React.FC<Props> = ({ user, onLogout }) => {
         const initialItems: CollectionItem[] = categories.map(cat => {
             // Match partial string to known categories in the dynamic rate list
             const matchedKey = Object.keys(wasteRates).find(k => cat.includes(k)) || 'Other';
+            const rate = wasteRates[matchedKey]?.rate || 10;
             return {
                 category: cat,
                 weight: 0,
-                rate: wasteRates[matchedKey],
+                rate: rate,
                 earned: 0
             };
         });
@@ -59,7 +60,7 @@ const DashboardCollector: React.FC<Props> = ({ user, onLogout }) => {
 
   const addNewItemRow = () => {
       // Default new item to 'Other' rate or first available
-      const defaultRate = wasteRates['Other'] || 10;
+      const defaultRate = wasteRates['Other']?.rate || 10;
       setCollectionItems([...collectionItems, { category: 'Other', weight: 0, rate: defaultRate, earned: 0 }]);
   };
 

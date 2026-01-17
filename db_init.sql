@@ -69,17 +69,21 @@ ON CONFLICT (id) DO NOTHING;
 -- Waste Rates Table
 CREATE TABLE IF NOT EXISTS waste_rates (
     category VARCHAR(100) PRIMARY KEY,
-    rate DECIMAL(10, 2) NOT NULL
+    rate DECIMAL(10, 2) NOT NULL,
+    co2_saved_per_kg DECIMAL(10, 4) DEFAULT 0
 );
 
--- Initial Rates
-INSERT INTO waste_rates (category, rate) VALUES 
-('Plastic', 15.00),
-('Paper', 5.00),
-('Metal', 40.00),
-('Glass', 10.00),
-('Electronics', 100.00),
-('Organic', 2.00)
+-- Migration for new column
+ALTER TABLE waste_rates ADD COLUMN IF NOT EXISTS co2_saved_per_kg DECIMAL(10, 4) DEFAULT 0;
+
+-- Initial Rates with CO2 values (Approximate CO2 saved per kg recycled)
+INSERT INTO waste_rates (category, rate, co2_saved_per_kg) VALUES 
+('Plastic', 15.00, 1.5),
+('Paper', 5.00, 0.9),
+('Metal', 40.00, 5.0),
+('Glass', 10.00, 0.3),
+('Electronics', 100.00, 10.0),
+('Organic', 2.00, 0.1)
 ON CONFLICT (category) DO NOTHING;
 
 -- Redemption Requests Table

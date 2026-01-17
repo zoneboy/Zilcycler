@@ -391,7 +391,12 @@ export const handler = async (event: any) => {
         const ratesRes = await query('SELECT * FROM waste_rates');
         
         const ratesObj: any = {};
-        ratesRes.rows.forEach((r: any) => ratesObj[r.category] = parseFloat(r.rate));
+        ratesRes.rows.forEach((r: any) => {
+            ratesObj[r.category] = {
+                rate: parseFloat(r.rate),
+                co2: parseFloat(r.co2_saved_per_kg || 0)
+            };
+        });
 
         return response(200, {
             sysConfig: {
@@ -410,8 +415,10 @@ export const handler = async (event: any) => {
     
     if (cleanPath === 'rates/update' && method === 'POST') {
         const { rates } = body;
-        for (const [category, rate] of Object.entries(rates)) {
-            await query('INSERT INTO waste_rates (category, rate) VALUES ($1, $2) ON CONFLICT (category) DO UPDATE SET rate = $2', [category, rate]);
+        for (const [category, data] of Object.entries(rates)) {
+            // data is now { rate: number, co2: number }
+            const typedData = data as any; 
+            await query('INSERT INTO waste_rates (category, rate, co2_saved_per_kg) VALUES ($1, $2, $3) ON CONFLICT (category) DO UPDATE SET rate = $2, co2_saved_per_kg = $3', [category, typedData.rate, typedData.co2]);
         }
         return response(200, { success: true });
     }

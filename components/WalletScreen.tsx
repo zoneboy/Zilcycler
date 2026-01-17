@@ -300,11 +300,11 @@ const WalletScreen: React.FC<Props> = ({ user }) => {
                   </div>
                   
                   <div className="space-y-3">
-                      {Object.entries(wasteRates).map(([category, rate]) => (
+                      {Object.entries(wasteRates).map(([category, details]) => (
                           <div key={category} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600">
                               <span className="font-bold text-gray-700 dark:text-gray-200">{category}</span>
                               <span className="font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-3 py-1 rounded-lg text-sm">
-                                  {rate} Z / kg
+                                  {details.rate} Z / kg
                               </span>
                           </div>
                       ))}
