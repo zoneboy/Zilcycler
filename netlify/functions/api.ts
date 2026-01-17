@@ -105,12 +105,6 @@ export const handler = async (event: any) => {
     if (cleanPath === 'auth/forgot-password' && method === 'POST') {
         const { email } = body;
         
-        // Validate Environment Configuration
-        if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-            console.error("CRITICAL: Missing SMTP Environment Variables in Netlify Settings.");
-            return response(500, { error: "System configuration error. Please contact support." });
-        }
-
         const { rows } = await query('SELECT id, name FROM users WHERE email = $1', [email]);
         
         if (rows.length === 0) {
@@ -129,35 +123,48 @@ export const handler = async (event: any) => {
             [email, otp, expiresAt]
         );
 
-        // Send Email via Nodemailer
-        try {
-            await transporter.sendMail({
-                from: process.env.SMTP_FROM || '"Zilcycler Support" <noreply@zilcycler.com>',
-                to: email,
-                subject: 'Reset Your Zilcycler Password',
-                html: `
-                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-                        <h2 style="color: #166534; text-align: center;">Password Reset Request</h2>
-                        <p>Hello ${userName},</p>
-                        <p>We received a request to reset your password for your Zilcycler account.</p>
-                        <div style="text-align: center; margin: 30px 0;">
-                            <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #166534; background: #f0fdf4; padding: 10px 20px; border-radius: 5px;">${otp}</span>
+        // CHECK: Are SMTP variables present?
+        const isSmtpConfigured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
+
+        if (isSmtpConfigured) {
+            // REAL EMAIL MODE
+            try {
+                await transporter.sendMail({
+                    from: process.env.SMTP_FROM || '"Zilcycler Support" <noreply@zilcycler.com>',
+                    to: email,
+                    subject: 'Reset Your Zilcycler Password',
+                    html: `
+                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+                            <h2 style="color: #166534; text-align: center;">Password Reset Request</h2>
+                            <p>Hello ${userName},</p>
+                            <p>We received a request to reset your password for your Zilcycler account.</p>
+                            <div style="text-align: center; margin: 30px 0;">
+                                <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #166534; background: #f0fdf4; padding: 10px 20px; border-radius: 5px;">${otp}</span>
+                            </div>
+                            <p>This code is valid for <strong>10 minutes</strong>.</p>
+                            <p style="color: #666; font-size: 12px; margin-top: 30px;">If you didn't request this change, you can safely ignore this email.</p>
+                            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+                            <p style="text-align: center; color: #999; font-size: 12px;">&copy; ${new Date().getFullYear()} Zilcycler. All rights reserved.</p>
                         </div>
-                        <p>This code is valid for <strong>10 minutes</strong>.</p>
-                        <p style="color: #666; font-size: 12px; margin-top: 30px;">If you didn't request this change, you can safely ignore this email.</p>
-                        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
-                        <p style="text-align: center; color: #999; font-size: 12px;">&copy; ${new Date().getFullYear()} Zilcycler. All rights reserved.</p>
-                    </div>
-                `,
-                text: `Your Zilcycler password reset code is: ${otp}. This code expires in 10 minutes.`
+                    `,
+                    text: `Your Zilcycler password reset code is: ${otp}. This code expires in 10 minutes.`
+                });
+                console.log(`[Email] OTP sent successfully to ${email}`);
+                return response(200, { message: "OTP sent to email" });
+            } catch (emailError: any) {
+                console.error("Failed to send OTP email:", emailError);
+                return response(500, { error: "Failed to send email. Check server logs." });
+            }
+        } else {
+            // SIMULATION MODE (Fallback if SMTP is missing)
+            console.log("================================================================");
+            console.log(`[SIMULATION] SMTP Variables missing. OTP for ${email}: ${otp}`);
+            console.log("================================================================");
+            return response(200, { 
+                message: "OTP generated (Simulation Mode)", 
+                warning: "Email not sent: SMTP config missing in Netlify." 
             });
-            console.log(`[Email] OTP sent successfully to ${email}`);
-        } catch (emailError: any) {
-            console.error("Failed to send OTP email:", emailError);
-            return response(500, { error: "Failed to send email. Please check server configuration." });
         }
-        
-        return response(200, { message: "OTP sent to email" });
     }
 
     if (cleanPath === 'auth/reset-password' && method === 'POST') {
