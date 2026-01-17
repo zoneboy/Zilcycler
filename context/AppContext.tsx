@@ -20,6 +20,8 @@ interface AppContextType {
   requestPasswordReset: (email: string) => Promise<void>;
   resetPassword: (email: string, otp: string, newPassword: string) => Promise<void>;
   addUser: (user: User, password?: string) => Promise<void>;
+  registerUser: (user: User, password: string, otp: string) => Promise<void>;
+  sendSignupVerification: (email: string) => Promise<void>;
   createRedemptionRequest: (req: RedemptionRequest) => void;
   updateRedemptionStatus: (id: string, status: 'Approved' | 'Rejected') => void;
   addBlogPost: (post: BlogPost) => void;
@@ -188,7 +190,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const addUser = async (user: User, password?: string) => {
-    // Perform API call first to ensure persistence
+    // Standard User Creation (Used by Admin)
     const response = await fetch('/api/users', {
         method: 'POST',
         body: JSON.stringify({ ...user, password })
@@ -201,6 +203,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Only update state if successful
     setUsers((prev) => [user, ...prev]);
+  };
+
+  const sendSignupVerification = async (email: string) => {
+      const response = await fetch('/api/auth/send-verification', {
+          method: 'POST',
+          body: JSON.stringify({ email })
+      });
+      if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Failed to send verification email');
+      }
+  };
+
+  const registerUser = async (user: User, password: string, otp: string) => {
+      const response = await fetch('/api/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({ user, password, otp })
+      });
+
+      if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Registration failed');
+      }
+
+      setUsers((prev) => [user, ...prev]);
   };
 
   const createRedemptionRequest = async (req: RedemptionRequest) => {
@@ -290,7 +317,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }
 
   return (
-    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, login, requestPasswordReset, resetPassword, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost }}>
+    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, registerUser, sendSignupVerification, login, requestPasswordReset, resetPassword, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost }}>
       {children}
     </AppContext.Provider>
   );

@@ -7,10 +7,10 @@ interface AuthProps {
   onLogin: (userId: string) => void;
 }
 
-type AuthView = 'landing' | 'login' | 'signup_household' | 'signup_org' | 'forgot_password_request' | 'forgot_password_verify';
+type AuthView = 'landing' | 'login' | 'signup_household' | 'signup_org' | 'signup_verify' | 'forgot_password_request' | 'forgot_password_verify';
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
-  const { sysConfig, users, addUser, login, requestPasswordReset, resetPassword } = useApp();
+  const { sysConfig, users, login, requestPasswordReset, resetPassword, sendSignupVerification, registerUser } = useApp();
   const [view, setView] = useState<AuthView>('landing');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -24,8 +24,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
+  // Signup Verification State
+  const [signupOtp, setSignupOtp] = useState('');
+
   // Validation & Form State
   const [signupData, setSignupData] = useState({
+      role: UserRole.HOUSEHOLD,
       fullName: '',
       email: '',
       phone: '',
@@ -39,6 +43,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
   const resetForm = (targetView: AuthView) => {
       setSignupData({
+          role: UserRole.HOUSEHOLD,
           fullName: '',
           email: '',
           phone: '',
@@ -50,6 +55,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       setLoginPassword('');
       setResetEmail('');
       setResetOtp('');
+      setSignupOtp('');
       setNewPassword('');
       setConfirmNewPassword('');
       setValidationError('');
@@ -97,7 +103,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
       try {
           await requestPasswordReset(resetEmail);
-          setSuccessMessage("OTP sent! Check your email (or server console for demo).");
+          setSuccessMessage("OTP sent! Check your email.");
           setTimeout(() => {
               setSuccessMessage('');
               setView('forgot_password_verify');
@@ -136,6 +142,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       }
   };
 
+  // Step 1: Request Verification OTP
   const handleSignupSubmit = async (e: React.FormEvent, role: UserRole) => {
     e.preventDefault();
     setValidationError('');
@@ -179,36 +186,51 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         return;
     }
 
-    // Check if email already exists
-    if (users.some(u => u.email?.toLowerCase() === signupData.email.toLowerCase())) {
-        setValidationError("Email already registered. Please login.");
-        setIsSubmitting(false);
-        return;
-    }
-
-    // Construct new user object
-    const newUser: User = {
-        id: `u_${Date.now().toString(36)}`,
-        name: signupData.fullName,
-        email: signupData.email,
-        phone: signupData.phone,
-        role: role,
-        avatar: `https://i.pravatar.cc/150?u=${signupData.email}`,
-        zointsBalance: 0,
-        isActive: true,
-        totalRecycledKg: 0
-    };
-
     try {
-        // Pass password to addUser
-        await addUser(newUser, signupData.password);
-        alert("Registration successful! Please log in.");
-        resetForm('login');
-    } catch (error) {
-        console.error("Signup failed", error);
-        setValidationError("Failed to create account. Please try again.");
+        // Send OTP via email
+        await sendSignupVerification(signupData.email);
+        setSuccessMessage("Verification code sent to email.");
+        setSignupData(prev => ({ ...prev, role })); // Ensure role is set
+        setTimeout(() => {
+             setSuccessMessage('');
+             setView('signup_verify'); // Switch to verification view
+             setIsSubmitting(false);
+        }, 1500);
+    } catch (error: any) {
+        console.error("Signup request failed", error);
+        setValidationError(error.message || "Failed to initiate signup.");
         setIsSubmitting(false);
     }
+  };
+
+  // Step 2: Verify OTP and Register
+  const handleSignupVerify = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setValidationError('');
+      setIsSubmitting(true);
+
+      const newUser: User = {
+          id: `u_${Date.now().toString(36)}`,
+          name: signupData.fullName,
+          email: signupData.email,
+          phone: signupData.phone,
+          role: signupData.role,
+          avatar: `https://i.pravatar.cc/150?u=${signupData.email}`,
+          zointsBalance: 0,
+          isActive: true,
+          totalRecycledKg: 0
+      };
+
+      try {
+          await registerUser(newUser, signupData.password, signupOtp);
+          setSuccessMessage("Registration successful! Logging you in...");
+          setTimeout(() => {
+              resetForm('login');
+          }, 2000);
+      } catch (error: any) {
+          setValidationError(error.message || "Invalid code or registration failed.");
+          setIsSubmitting(false);
+      }
   };
 
   const handleSignupClick = (targetView: AuthView) => {
@@ -392,7 +414,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             disabled={isSubmitting}
             className="w-full bg-white text-green-800 py-3 rounded-xl font-bold shadow-lg hover:bg-green-50 transition-transform active:scale-95 mt-6 disabled:opacity-70 disabled:active:scale-100"
         >
-            {isSubmitting ? 'Creating Account...' : 'Create Account'}
+            {isSubmitting ? 'Sending Code...' : 'Send Verification Code'}
         </button>
     </form>
   );
@@ -418,6 +440,53 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         {view === 'signup_household' && renderSignupForm(UserRole.HOUSEHOLD, 'Household Join', <UserIcon className="w-8 h-8"/>, 'Home Address', '123 Green St, Lagos')}
 
         {view === 'signup_org' && renderSignupForm(UserRole.ORGANIZATION, 'Organization Join', <Building2 className="w-8 h-8"/>, 'Industry Type', 'Select Industry', true)}
+
+        {/* SIGNUP VERIFICATION */}
+        {view === 'signup_verify' && (
+            <form onSubmit={handleSignupVerify} className="w-full max-w-sm space-y-4 animate-fade-in-up bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 relative">
+                <button type="button" onClick={() => setView(signupData.role === UserRole.ORGANIZATION ? 'signup_org' : 'signup_household')} className="absolute top-4 left-4 text-white hover:text-green-200 transition-colors">
+                    <ArrowLeft className="w-6 h-6" />
+                </button>
+                <div className="text-center mb-6">
+                    <div className="inline-block p-3 bg-white/20 rounded-full mb-3 text-white shadow-inner">
+                        <KeyRound className="w-8 h-8" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-white">Verify Email</h2>
+                    <p className="text-green-100 text-xs mt-2">Enter the code sent to <span className="font-bold">{signupData.email}</span></p>
+                </div>
+
+                {validationError && (
+                    <div className="bg-red-500/80 text-white text-xs font-bold p-3 rounded-xl border border-red-400 backdrop-blur-sm animate-pulse">
+                        {validationError}
+                    </div>
+                )}
+                {successMessage && (
+                    <div className="bg-green-500/80 text-white text-xs font-bold p-3 rounded-xl border border-green-400 backdrop-blur-sm flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4" /> {successMessage}
+                    </div>
+                )}
+
+                <div className="text-left">
+                    <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">Verification Code</label>
+                    <input 
+                        type="text" 
+                        value={signupOtp}
+                        onChange={(e) => setSignupOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        className="w-full p-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder-green-100/50 focus:outline-none focus:bg-white/30 focus:border-white/50 transition-all text-center tracking-[0.5em] font-bold text-lg" 
+                        placeholder="000000"
+                        required 
+                    />
+                </div>
+
+                <button 
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full bg-white text-green-800 py-3 rounded-xl font-bold shadow-lg hover:bg-green-50 transition-transform active:scale-95 mt-4 disabled:opacity-70"
+                >
+                    {isSubmitting ? 'Verifying...' : 'Create Account'}
+                </button>
+            </form>
+        )}
 
         {view === 'login' && (
              <form onSubmit={handleLoginSubmit} className="w-full max-w-sm space-y-4 animate-fade-in-up bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 relative">

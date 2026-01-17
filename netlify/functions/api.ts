@@ -101,6 +101,106 @@ export const handler = async (event: any) => {
         return response(200, userObj);
     }
 
+    // --- SIGNUP VERIFICATION (NEW) ---
+    if (cleanPath === 'auth/send-verification' && method === 'POST') {
+        const { email } = body;
+        
+        // 1. Check if user already exists
+        const userCheck = await query('SELECT id FROM users WHERE email = $1', [email]);
+        if (userCheck.rows.length > 0) {
+            return response(409, { error: "Email already registered. Please login." });
+        }
+
+        // 2. Generate OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 mins
+
+        // 3. Save OTP (Reusing password_resets table as generic verification table)
+        await query(
+            'INSERT INTO password_resets (email, otp, expires_at) VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3',
+            [email, otp, expiresAt]
+        );
+
+        // 4. Send Email
+        const isSmtpConfigured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
+        if (isSmtpConfigured) {
+            try {
+                await transporter.sendMail({
+                    from: process.env.SMTP_FROM || '"Zilcycler" <noreply@zilcycler.com>',
+                    to: email,
+                    subject: 'Verify your email - Zilcycler',
+                    html: `
+                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+                            <h2 style="color: #166534; text-align: center;">Welcome to Zilcycler</h2>
+                            <p>Please verify your email address to complete your registration.</p>
+                            <div style="text-align: center; margin: 30px 0;">
+                                <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #166534; background: #f0fdf4; padding: 10px 20px; border-radius: 5px;">${otp}</span>
+                            </div>
+                            <p>This code expires in <strong>15 minutes</strong>.</p>
+                        </div>
+                    `,
+                    text: `Your Zilcycler verification code is: ${otp}`
+                });
+            } catch (e) {
+                console.error("Email error", e);
+                return response(500, { error: "Failed to send verification email." });
+            }
+        } else {
+             console.log(`[SIMULATION] Signup OTP for ${email}: ${otp}`);
+        }
+        return response(200, { message: "OTP sent" });
+    }
+
+    // --- COMPLETE REGISTRATION (NEW) ---
+    if (cleanPath === 'auth/register' && method === 'POST') {
+        const { user, password, otp } = body;
+
+        // 1. Verify OTP
+        const otpCheck = await query('SELECT * FROM password_resets WHERE email = $1', [user.email]);
+        if (otpCheck.rows.length === 0 || otpCheck.rows[0].otp !== otp) {
+            return response(400, { error: "Invalid verification code" });
+        }
+        if (new Date(otpCheck.rows[0].expires_at) < new Date()) {
+            return response(400, { error: "Verification code expired" });
+        }
+
+        // 2. Create User
+        const passwordHash = hashPassword(password);
+        await query(
+            `INSERT INTO users (id, name, email, role, phone, avatar, password_hash) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [user.id, user.name, user.email, user.role, user.phone, user.avatar, passwordHash]
+        );
+
+        // 3. Clean up OTP
+        await query('DELETE FROM password_resets WHERE email = $1', [user.email]);
+
+        // 4. Send Welcome Email
+        const isSmtpConfigured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
+        if (isSmtpConfigured) {
+            try {
+               await transporter.sendMail({
+                    from: process.env.SMTP_FROM || '"Zilcycler" <noreply@zilcycler.com>',
+                    to: user.email,
+                    subject: 'Welcome to Zilcycler!',
+                    html: `
+                      <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px; max-width: 600px; margin: 0 auto;">
+                        <h2 style="color: #166534;">Welcome, ${user.name}!</h2>
+                        <p>Thank you for joining Zilcycler as a <strong>${user.role}</strong>.</p>
+                        <p>Your account has been successfully created. You can now log in to your dashboard to start recycling and earning rewards.</p>
+                        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+                        <p style="color: #666; font-size: 14px;">Let's make the world cleaner together!</p>
+                      </div>
+                    `
+               });
+            } catch (e) {
+                console.error("Welcome email error", e);
+                // Continue even if welcome email fails
+            }
+        }
+
+        return response(201, { message: "Account created successfully" });
+    }
+
     // --- PASSWORD RESET ---
     if (cleanPath === 'auth/forgot-password' && method === 'POST') {
         const { email } = body;
@@ -123,11 +223,9 @@ export const handler = async (event: any) => {
             [email, otp, expiresAt]
         );
 
-        // CHECK: Are SMTP variables present?
         const isSmtpConfigured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
 
         if (isSmtpConfigured) {
-            // REAL EMAIL MODE
             try {
                 await transporter.sendMail({
                     from: process.env.SMTP_FROM || '"Zilcycler Support" <noreply@zilcycler.com>',
@@ -149,14 +247,12 @@ export const handler = async (event: any) => {
                     `,
                     text: `Your Zilcycler password reset code is: ${otp}. This code expires in 10 minutes.`
                 });
-                console.log(`[Email] OTP sent successfully to ${email}`);
                 return response(200, { message: "OTP sent to email" });
             } catch (emailError: any) {
                 console.error("Failed to send OTP email:", emailError);
                 return response(500, { error: "Failed to send email. Check server logs." });
             }
         } else {
-            // SIMULATION MODE (Fallback if SMTP is missing)
             console.log("================================================================");
             console.log(`[SIMULATION] SMTP Variables missing. OTP for ${email}: ${otp}`);
             console.log("================================================================");
