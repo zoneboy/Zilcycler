@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { User, Screen } from '../types';
+import React, { useState, useMemo } from 'react';
+import { User, Screen, PickupTask } from '../types';
 import { useApp } from '../context/AppContext';
 import WalletCard from './WalletCard';
-import { Truck, FileBadge, BarChart3, Building2, Download, ChevronRight, ArrowLeft, Clock } from 'lucide-react';
+import { Truck, FileBadge, BarChart3, Building2, Download, ChevronRight, ArrowLeft } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface Props {
@@ -10,36 +10,54 @@ interface Props {
   onNavigate: (screen: Screen) => void;
 }
 
-const MOCK_MONTHLY_DATA = [
-  { name: 'Jan', value: 400 },
-  { name: 'Feb', value: 300 },
-  { name: 'Mar', value: 600 },
-  { name: 'Apr', value: 800 },
-  { name: 'May', value: 500 },
-  { name: 'Jun', value: 700 },
-];
-
-const MOCK_COMPOSITION_DATA = [
-  { name: 'Plastic', value: 400, color: '#4ade80' },
-  { name: 'Paper', value: 300, color: '#60a5fa' },
-  { name: 'Glass', value: 300, color: '#facc15' },
-  { name: 'Metal', value: 200, color: '#94a3b8' },
-];
+const COLORS = ['#4ade80', '#60a5fa', '#facc15', '#94a3b8', '#fb7185', '#a78bfa'];
 
 const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
   const { getPickupsByRole } = useApp();
   const [showAnalytics, setShowAnalytics] = useState(false);
 
-  // Dynamic Balance Calculation
+  // Dynamic Calculations
   const myPickups = getPickupsByRole(user.role, user.id);
-  const earnedZoints = myPickups
-    .filter(p => p.status === 'Completed')
-    .reduce((sum, p) => sum + (p.earnedZoints || 0), 0);
-  
+  const completedPickups = myPickups.filter(p => p.status === 'Completed');
+
+  const earnedZoints = completedPickups.reduce((sum, p) => sum + (p.earnedZoints || 0), 0);
   const currentBalance = user.zointsBalance + earnedZoints;
-  const totalRecycled = (user.totalRecycledKg || 0) + myPickups
-    .filter(p => p.status === 'Completed')
-    .reduce((sum, p) => sum + (p.weight || 0), 0);
+  const totalRecycled = (user.totalRecycledKg || 0) + completedPickups.reduce((sum, p) => sum + (p.weight || 0), 0);
+
+  // Chart Data Calculations
+  const { monthlyData, compositionData } = useMemo(() => {
+      // 1. Monthly Data
+      const monthly: {[key: string]: number} = {};
+      completedPickups.forEach(p => {
+          const date = new Date(p.date);
+          if (!isNaN(date.getTime())) {
+              const month = date.toLocaleString('default', { month: 'short' });
+              monthly[month] = (monthly[month] || 0) + (p.weight || 0);
+          }
+      });
+      const mData = Object.entries(monthly).map(([name, value]) => ({ name, value }));
+
+      // 2. Composition Data
+      const comp: {[key: string]: number} = {};
+      completedPickups.forEach(p => {
+          if (p.collectionDetails) {
+              p.collectionDetails.forEach(d => {
+                  comp[d.category] = (comp[d.category] || 0) + d.weight;
+              });
+          } else {
+              // Fallback
+              const cat = p.items.split(',')[0].trim() || 'Unsorted';
+              comp[cat] = (comp[cat] || 0) + (p.weight || 0);
+          }
+      });
+      const cData = Object.entries(comp).map(([name, value], idx) => ({ 
+          name, 
+          value, 
+          color: COLORS[idx % COLORS.length] 
+      }));
+
+      return { monthlyData: mData, compositionData: cData };
+  }, [completedPickups]);
 
   if (showAnalytics) {
       return (
@@ -74,23 +92,23 @@ const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
               <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="font-bold text-gray-800 dark:text-white">Monthly Trend</h3>
-                    <select className="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-xs rounded-lg px-2 py-1 outline-none">
-                        <option>Last 6 Months</option>
-                        <option>Year to Date</option>
-                    </select>
                   </div>
                   <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={MOCK_MONTHLY_DATA}>
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#9ca3af'}} />
-                            <Tooltip 
-                                cursor={{fill: '#f3f4f6'}} 
-                                contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', backgroundColor: 'var(--tw-bg-opacity, 1)'}} 
-                                wrapperClassName="dark:!bg-gray-700 dark:!text-white"
-                            />
-                            <Bar dataKey="value" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={32} />
-                        </BarChart>
-                    </ResponsiveContainer>
+                    {monthlyData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={monthlyData}>
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#9ca3af'}} />
+                                <Tooltip 
+                                    cursor={{fill: '#f3f4f6'}} 
+                                    contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} 
+                                    wrapperClassName="dark:!bg-gray-700 dark:!text-white"
+                                />
+                                <Bar dataKey="value" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={32} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="flex h-full items-center justify-center text-gray-400">No data available</div>
+                    )}
                   </div>
               </div>
 
@@ -98,31 +116,37 @@ const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
               <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
                   <h3 className="font-bold text-gray-800 dark:text-white mb-2">Waste Composition</h3>
                   <div className="h-64 relative">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie
-                                data={MOCK_COMPOSITION_DATA}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={60}
-                                outerRadius={80}
-                                paddingAngle={5}
-                                dataKey="value"
-                            >
-                                {MOCK_COMPOSITION_DATA.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
-                            </Pie>
-                            <Tooltip />
-                            <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                        </PieChart>
-                    </ResponsiveContainer>
-                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                         <div className="text-center">
-                             <span className="text-xs text-gray-400 font-bold uppercase">Total</span>
-                             <p className="text-xl font-bold text-gray-800 dark:text-white">100%</p>
-                         </div>
-                     </div>
+                    {compositionData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={compositionData}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={80}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                >
+                                    {compositionData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                                <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    ) : (
+                         <div className="flex h-full items-center justify-center text-gray-400">No data available</div>
+                    )}
+                     {compositionData.length > 0 && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="text-center">
+                                <span className="text-xs text-gray-400 font-bold uppercase">Total</span>
+                                <p className="text-xl font-bold text-gray-800 dark:text-white">{totalRecycled}kg</p>
+                            </div>
+                        </div>
+                     )}
                   </div>
               </div>
           </div>
@@ -176,7 +200,7 @@ const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
                  <div className="text-left">
                      <h3 className="font-bold text-gray-900 dark:text-white">Track Corporate Pickups</h3>
                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {myPickups.filter(p => p.status !== 'Completed').length} Assigned • {myPickups.filter(p => p.status === 'Completed').length} Completed
+                        {myPickups.filter(p => p.status !== 'Completed').length} Assigned • {completedPickups.length} Completed
                      </p>
                  </div>
             </div>

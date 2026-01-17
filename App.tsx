@@ -11,7 +11,7 @@ import SchedulePickup from './components/SchedulePickup';
 import BlogList from './components/BlogList';
 import Settings from './components/Settings';
 import DropOffLocations from './components/DropOffLocations';
-import Messages from './components/Messages';
+import MessagesWithUser from './components/Messages'; // Updated import
 import WalletScreen from './components/WalletScreen';
 import PickupHistory from './components/PickupHistory';
 import { Home, FileText, Settings as SettingsIcon, LogOut, ArrowLeft, Building2, Wallet } from 'lucide-react';
@@ -65,7 +65,7 @@ const MainApp: React.FC = () => {
       case Screen.DROP_OFF:
         return <DropOffLocations />;
       case Screen.MESSAGES:
-        return <Messages />;
+        return <MessagesWithUser user={effectiveUser} />; // Pass user prop
       case Screen.WALLET:
         return <WalletScreen user={effectiveUser} />;
       case Screen.PICKUP_HISTORY:

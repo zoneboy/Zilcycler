@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { PickupTask, UserRole, WasteRates, SystemConfig, User, RedemptionRequest, BlogPost } from '../types';
+import { PickupTask, UserRole, WasteRates, SystemConfig, User, RedemptionRequest, BlogPost, DropOffLocation, Message } from '../types';
 
 interface AppContextType {
   pickups: PickupTask[];
@@ -8,17 +8,21 @@ interface AppContextType {
   users: User[];
   redemptionRequests: RedemptionRequest[];
   blogPosts: BlogPost[];
+  dropOffLocations: DropOffLocation[];
+  messages: Message[];
   schedulePickup: (task: PickupTask) => void;
   updatePickup: (id: string, updates: Partial<PickupTask>) => void;
   getPickupsByRole: (role: UserRole, userId?: string) => PickupTask[];
   updateWasteRates: (newRates: WasteRates) => void;
   updateSysConfig: (config: SystemConfig) => void;
   updateUser: (id: string, updates: Partial<User>) => void;
-  addUser: (user: User) => void;
+  login: (email: string, password: string) => Promise<User>;
+  addUser: (user: User, password?: string) => Promise<void>;
   createRedemptionRequest: (req: RedemptionRequest) => void;
   updateRedemptionStatus: (id: string, status: 'Approved' | 'Rejected') => void;
   addBlogPost: (post: BlogPost) => void;
   deleteBlogPost: (id: string) => void;
+  sendMessage: (msg: Message) => void;
   loading: boolean;
 }
 
@@ -27,12 +31,16 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  
+  // Data States
   const [pickups, setPickups] = useState<PickupTask[]>([]);
   const [wasteRates, setWasteRates] = useState<WasteRates>({});
   const [sysConfig, setSysConfig] = useState<SystemConfig>({ maintenanceMode: false, allowRegistrations: true });
   const [users, setUsers] = useState<User[]>([]);
   const [redemptionRequests, setRedemptionRequests] = useState<RedemptionRequest[]>([]);
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
+  const [dropOffLocations, setDropOffLocations] = useState<DropOffLocation[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
 
   // Initial Data Fetch
   useEffect(() => {
@@ -44,7 +52,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               '/api/pickups', 
               '/api/config', 
               '/api/redemption', 
-              '/api/blog'
+              '/api/blog',
+              '/api/locations',
+              '/api/messages'
             ];
             
             const responses = await Promise.all(endpoints.map(ep => fetch(ep)));
@@ -62,6 +72,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const configData = await responses[2].json();
             const redemptionsData = await responses[3].json();
             const blogData = await responses[4].json();
+            const locationsData = await responses[5].json();
+            const messagesData = await responses[6].json();
 
             setUsers(usersData);
             setPickups(pickupsData);
@@ -69,6 +81,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setWasteRates(configData.wasteRates);
             setRedemptionRequests(redemptionsData);
             setBlogPosts(blogData);
+            setDropOffLocations(locationsData);
+            setMessages(messagesData);
         } catch (error: any) {
             console.error("Failed to load initial data", error);
             setErrorMsg(error.message);
@@ -80,10 +94,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     fetchAllData();
   }, []);
 
+  const login = async (email: string, password: string): Promise<User> => {
+      const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password })
+      });
+      
+      if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Login failed');
+      }
+
+      return await response.json();
+  };
+
   const schedulePickup = async (task: PickupTask) => {
-    // Optimistic Update
     setPickups((prev) => [task, ...prev]);
-    // API Call
     try {
         await fetch('/api/pickups', {
             method: 'POST',
@@ -98,7 +124,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setPickups((prev) => 
       prev.map((p) => (p && p.id === id) ? { ...p, ...updates } : p)
     );
-    // If completing, we also update user balance in frontend state for immediate feedback
     if (updates.earnedZoints && updates.status === 'Completed') {
         const task = pickups.find(p => p.id === id);
         if (task) {
@@ -136,11 +161,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
-  const addUser = async (user: User) => {
+  const addUser = async (user: User, password?: string) => {
     setUsers((prev) => [user, ...prev]);
     await fetch('/api/users', {
         method: 'POST',
-        body: JSON.stringify(user)
+        body: JSON.stringify({ ...user, password })
     });
   };
 
@@ -159,7 +184,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateRedemptionStatus = async (id: string, status: 'Approved' | 'Rejected') => {
     setRedemptionRequests((prev) => prev.map(r => (r && r.id === id) ? { ...r, status } : r));
-    
     if (status === 'Rejected') {
         const req = redemptionRequests.find(r => r && r.id === id);
         if (req) {
@@ -170,7 +194,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             ));
         }
     }
-
     await fetch('/api/redemption', {
         method: 'PUT',
         body: JSON.stringify({ id, status })
@@ -191,6 +214,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         method: 'DELETE',
         body: JSON.stringify({ id })
     });
+  };
+
+  const sendMessage = async (msg: Message) => {
+      setMessages(prev => [...prev, msg]);
+      await fetch('/api/messages', {
+          method: 'POST',
+          body: JSON.stringify(msg)
+      });
   };
 
   const getPickupsByRole = (role: UserRole, userId?: string) => {
@@ -225,7 +256,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }
 
   return (
-    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost }}>
+    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, login, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost }}>
       {children}
     </AppContext.Provider>
   );

@@ -1,4 +1,5 @@
 import { query } from './db';
+import crypto from 'crypto';
 
 // Helper for standard response
 const response = (statusCode: number, body: any) => ({
@@ -10,33 +11,87 @@ const response = (statusCode: number, body: any) => ({
   body: JSON.stringify(body)
 });
 
+// Password Utils
+const hashPassword = (password: string) => {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    return `${salt}:${hash}`;
+};
+
+const verifyPassword = (password: string, storedHash: string) => {
+    if (!storedHash) return false;
+    const parts = storedHash.split(':');
+    if (parts.length !== 2) return false;
+    const [salt, originalHash] = parts;
+    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    return hash === originalHash;
+};
+
 export const handler = async (event: any) => {
-  // Robust path parsing
-  // event.path might be "/.netlify/functions/api/users" or just "/users" depending on how it's invoked (proxy vs redirect)
   let cleanPath = event.path
-    .replace(/\/?\.netlify\/functions\/api/, '') // Remove function base
-    .replace(/^\/api/, '') // Remove /api base if present
-    .replace(/^\//, ''); // Remove leading slash
+    .replace(/\/?\.netlify\/functions\/api/, '')
+    .replace(/^\/api/, '')
+    .replace(/^\//, '');
     
-  // If cleanPath is empty or just slash, it might be the root check
   if (!cleanPath) cleanPath = '';
 
   const method = event.httpMethod;
   const body = event.body ? JSON.parse(event.body) : {};
 
-  // Log for debugging (appears in Netlify logs)
   console.log(`[API] ${method} /${cleanPath}`);
 
   try {
-    // --- HEALTH CHECK ---
     if (cleanPath === '' || cleanPath === 'health') {
         return response(200, { status: 'ok', message: 'Zilcycler API is running' });
+    }
+
+    // --- AUTHENTICATION ---
+    if (cleanPath === 'auth/login' && method === 'POST') {
+        const { email, password } = body;
+        
+        // 1. Fetch user by email
+        const { rows } = await query('SELECT * FROM users WHERE email = $1', [email]);
+        const user = rows[0];
+
+        if (!user) {
+            return response(401, { error: "Invalid email or password" });
+        }
+
+        // 2. Verify Password
+        if (!user.password_hash) {
+             return response(401, { error: "Account security update required. Please reset password." });
+        }
+
+        const isValid = verifyPassword(password, user.password_hash);
+        if (!isValid) {
+            return response(401, { error: "Invalid email or password" });
+        }
+
+        // 3. Return user info (excluding password)
+        const userObj = {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            phone: user.phone,
+            avatar: user.avatar,
+            zointsBalance: parseFloat(user.zoints_balance),
+            totalRecycledKg: parseFloat(user.total_recycled_kg),
+            isActive: user.is_active,
+            bankDetails: {
+                bankName: user.bank_name,
+                accountNumber: user.account_number,
+                accountName: user.account_name
+            }
+        };
+
+        return response(200, userObj);
     }
 
     // --- USERS ---
     if (cleanPath === 'users') {
       if (method === 'GET') {
-        const { rows } = await query('SELECT * FROM users');
+        const { rows } = await query('SELECT id, name, email, role, phone, avatar, zoints_balance, total_recycled_kg, is_active, bank_name, account_number, account_name, created_at FROM users');
         const users = rows.map((u: any) => ({
             ...u,
             zointsBalance: parseFloat(u.zoints_balance),
@@ -51,10 +106,12 @@ export const handler = async (event: any) => {
         return response(200, users);
       }
       if (method === 'POST') {
-        const { id, name, email, role, phone } = body;
+        const { id, name, email, role, phone, password } = body;
+        const passwordHash = password ? hashPassword(password) : null;
+
         await query(
-            `INSERT INTO users (id, name, email, role, phone, avatar) VALUES ($1, $2, $3, $4, $5, $6)`,
-            [id, name, email, role, phone, `https://i.pravatar.cc/150?u=${id}`]
+            `INSERT INTO users (id, name, email, role, phone, avatar, password_hash) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [id, name, email, role, phone, `https://i.pravatar.cc/150?u=${id}`, passwordHash]
         );
         return response(201, { message: "User created" });
       }
@@ -198,6 +255,48 @@ export const handler = async (event: any) => {
             const { id } = body;
             await query('DELETE FROM blog_posts WHERE id = $1', [id]);
             return response(200, { success: true });
+        }
+    }
+
+    // --- LOCATIONS ---
+    if (cleanPath === 'locations') {
+        if (method === 'GET') {
+            const { rows } = await query('SELECT * FROM drop_off_locations');
+            const locations = rows.map((l: any) => ({
+                id: l.id,
+                name: l.name,
+                address: l.address,
+                open: l.open_hours,
+                url: l.map_url,
+                lat: parseFloat(l.lat),
+                lng: parseFloat(l.lng)
+            }));
+            return response(200, locations);
+        }
+    }
+
+    // --- MESSAGES ---
+    if (cleanPath === 'messages') {
+        if (method === 'GET') {
+            // Get all messages for standard operations (filtering done in frontend context or refined query if needed)
+            const { rows } = await query('SELECT * FROM messages ORDER BY created_at ASC');
+            const messages = rows.map((m: any) => ({
+                id: m.id,
+                senderId: m.sender_id,
+                receiverId: m.receiver_id,
+                content: m.content,
+                createdAt: m.created_at,
+                isRead: m.is_read
+            }));
+            return response(200, messages);
+        }
+        if (method === 'POST') {
+            const m = body;
+            await query(
+                'INSERT INTO messages (id, sender_id, receiver_id, content) VALUES ($1, $2, $3, $4)',
+                [m.id, m.senderId, m.receiverId, m.content]
+            );
+            return response(201, { success: true });
         }
     }
 

@@ -1,3 +1,4 @@
+
 export enum UserRole {
   HOUSEHOLD = 'HOUSEHOLD',
   COLLECTOR = 'COLLECTOR',
@@ -99,4 +100,23 @@ export interface RedemptionRequest {
   amount: number;
   status: 'Pending' | 'Approved' | 'Rejected';
   date: string;
+}
+
+export interface DropOffLocation {
+  id: string;
+  name: string;
+  address: string;
+  open: string;
+  url: string;
+  lat: number;
+  lng: number;
+}
+
+export interface Message {
+    id: string;
+    senderId: string;
+    receiverId: string;
+    content: string;
+    createdAt: string;
+    isRead: boolean;
 }

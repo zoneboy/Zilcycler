@@ -10,7 +10,7 @@ interface AuthProps {
 type AuthView = 'landing' | 'login' | 'signup_household' | 'signup_org';
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
-  const { sysConfig, users, addUser } = useApp();
+  const { sysConfig, users, addUser, login } = useApp();
   const [view, setView] = useState<AuthView>('landing');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -47,32 +47,35 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       setIsSubmitting(false);
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError('');
+    setIsSubmitting(true);
     
-    // 1. Find user by email (Simple auth for live deployment based on existing DB)
-    const foundUser = users.find(u => u.email?.toLowerCase() === loginEmail.toLowerCase());
-
-    if (!foundUser) {
-        setValidationError("Invalid email or password.");
-        return;
-    }
-
-    if (!foundUser.isActive) {
-        setValidationError("Account is suspended. Please contact support.");
-        return;
-    }
-
-    // Maintenance Mode Check
-    if (sysConfig.maintenanceMode) {
-        if (foundUser.role !== UserRole.ADMIN && foundUser.role !== UserRole.STAFF) {
-            alert("⚠️ SYSTEM UNDER MAINTENANCE\n\nAccess is currently restricted to Admin and Staff only. Please check back later.");
+    try {
+        const user = await login(loginEmail, loginPassword);
+        
+        if (!user.isActive) {
+            setValidationError("Account is suspended. Please contact support.");
+            setIsSubmitting(false);
             return;
         }
-    }
 
-    onLogin(foundUser.id);
+        // Maintenance Mode Check
+        if (sysConfig.maintenanceMode) {
+            if (user.role !== UserRole.ADMIN && user.role !== UserRole.STAFF) {
+                alert("⚠️ SYSTEM UNDER MAINTENANCE\n\nAccess is currently restricted to Admin and Staff only. Please check back later.");
+                setIsSubmitting(false);
+                return;
+            }
+        }
+
+        onLogin(user.id);
+    } catch (error: any) {
+        console.error("Login Error", error);
+        setValidationError(error.message || "Invalid email or password.");
+        setIsSubmitting(false);
+    }
   };
 
   const handleSignupSubmit = async (e: React.FormEvent, role: UserRole) => {
@@ -136,11 +139,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         zointsBalance: 0,
         isActive: true,
         totalRecycledKg: 0
-        // Note: Password/Address fields are not currently stored in the simple User table schema
     };
 
     try {
-        await addUser(newUser);
+        // Pass password to addUser
+        await addUser(newUser, signupData.password);
         alert("Registration successful! Please log in.");
         resetForm('login');
     } catch (error) {
@@ -397,9 +400,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
                 <button 
                     type="submit"
-                    className="w-full bg-white text-green-800 py-3 rounded-xl font-bold shadow-lg hover:bg-green-50 transition-transform active:scale-95 mt-4"
+                    disabled={isSubmitting}
+                    className="w-full bg-white text-green-800 py-3 rounded-xl font-bold shadow-lg hover:bg-green-50 transition-transform active:scale-95 mt-4 disabled:opacity-70"
                 >
-                    Log In
+                    {isSubmitting ? 'Verifying...' : 'Log In'}
                 </button>
             </form>
         )}
