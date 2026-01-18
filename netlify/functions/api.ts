@@ -222,6 +222,21 @@ export const handler = async (event: any) => {
             [userId, regUser.name, regUser.email, regUser.role, regUser.phone, regUser.avatar || '', passwordHash, regUser.gender, regUser.address, regUser.industry]
         );
         await query('DELETE FROM password_resets WHERE email = $1', [regUser.email]);
+
+        // --- Send Welcome Email ---
+        if (process.env.SMTP_HOST) {
+             try {
+                await transporter.sendMail({
+                    from: process.env.SMTP_FROM,
+                    to: regUser.email,
+                    subject: 'Welcome to Zilcycler!',
+                    text: `Hi ${regUser.name},\n\nWelcome to Zilcycler! We are thrilled to have you join our community dedicated to sustainable waste management.\n\nYou can now log in to your dashboard to schedule pickups, track your recycling impact, and earn Zoints.\n\nLet's make the world cleaner together!\n\nBest regards,\nThe Zilcycler Team`
+                });
+             } catch (e) {
+                 console.error("Welcome email fail", e);
+             }
+        }
+
         return response(201, { message: "Account created", userId });
     }
 
