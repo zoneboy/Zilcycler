@@ -147,11 +147,3 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_read BOOLEAN DEFAULT FALSE
 );
-
--- Default Admin User
--- Email: demo@zilcycler.com
--- Password: password123
--- Hash: Bcrypt (cost 12) for 'password123'
-INSERT INTO users (id, name, email, role, phone, avatar, zoints_balance, is_active, password_hash)
-VALUES ('admin-1', 'System Admin', 'demo@zilcycler.com', 'ADMIN', '0000000000', 'https://i.pravatar.cc/150?u=admin', 0, TRUE, '$2a$12$rq9.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1')
-ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
