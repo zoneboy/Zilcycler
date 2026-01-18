@@ -238,7 +238,20 @@ export const handler = async (event: any) => {
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
         await query('INSERT INTO password_resets (email, otp, expires_at) VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3', [email, otp, expiresAt]);
-        // Assume email sending here...
+        
+        if (process.env.SMTP_HOST) {
+             try {
+                await transporter.sendMail({
+                    from: process.env.SMTP_FROM,
+                    to: email,
+                    subject: 'Reset Password - Zilcycler',
+                    text: `Your password reset code is: ${otp}`
+                });
+             } catch (e) {
+                 console.error("Email fail", e);
+             }
+        }
+        
         return response(200, { message: "OTP sent" });
     }
 
@@ -278,6 +291,20 @@ export const handler = async (event: any) => {
             const otp = Math.floor(100000 + Math.random() * 900000).toString();
             const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
             await query('INSERT INTO password_resets (email, otp, expires_at) VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3', [rows[0].email, otp, expiresAt]);
+            
+            if (process.env.SMTP_HOST) {
+                 try {
+                    await transporter.sendMail({
+                        from: process.env.SMTP_FROM,
+                        to: rows[0].email,
+                        subject: 'Change Password Verification - Zilcycler',
+                        text: `Your verification code is: ${otp}`
+                    });
+                 } catch (e) {
+                     console.error("Email fail", e);
+                 }
+            }
+
             return response(200, { message: "OTP sent" });
         }
 
