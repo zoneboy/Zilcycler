@@ -605,13 +605,14 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
              <div className="space-y-2">
                  <MenuLink icon={<Users className="w-5 h-5" />} label="User Management" onClick={() => setCurrentView('USERS')} />
                  <MenuLink icon={<Truck className="w-5 h-5" />} label="Pickup Operations" onClick={() => setCurrentView('PICKUPS')} />
+                 <MenuLink icon={<Banknote className="w-5 h-5" />} label="Redemption Requests" onClick={() => setCurrentView('REQUESTS')} />
                  <MenuLink icon={<BookOpen className="w-5 h-5" />} label="Content & Tips" onClick={() => setCurrentView('TIPS')} />
                  <MenuLink icon={<FileBadge className="w-5 h-5" />} label="Certificates" onClick={() => setCurrentView('CERTIFICATES')} />
                  <MenuLink icon={<Settings className="w-5 h-5" />} label="System Settings" onClick={() => setCurrentView('SETTINGS')} />
              </div>
         </div>
     );
-  };
+};
 
   const renderRequests = () => {
       // Logic for filtering
@@ -1473,6 +1474,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
   );
 };
 
+// ... MenuLink component remains the same ...
 const MenuLink = ({ icon, label, onClick }: { icon: React.ReactNode, label: string, onClick: () => void }) => (
     <button onClick={onClick} className="w-full flex items-center justify-between bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-colors">
         <div className="flex items-center gap-3 text-gray-600">
