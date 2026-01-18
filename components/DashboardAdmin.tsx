@@ -20,12 +20,25 @@ const RecyclingVolumeView: React.FC<{
     pickups: PickupTask[];
     onBack: () => void;
 }> = ({ pickups, onBack }) => {
-    // Aggregation Logic using useMemo (Now safe as it's at the top level of this component)
+    const [filterRange, setFilterRange] = useState({ start: '', end: '' });
+
+    // Aggregation Logic using useMemo
     const volumeData = useMemo(() => {
         const stats: Record<string, { totalWeight: number; count: number; categories: Record<string, number> }> = {};
         
+        const start = filterRange.start ? new Date(filterRange.start) : null;
+        const end = filterRange.end ? new Date(filterRange.end) : null;
+        // Set end date to end of day to include pickups on that day
+        if (end) end.setHours(23, 59, 59, 999);
+
         pickups.forEach(p => {
              if (p.status !== 'Completed') return;
+
+             // Date filtering
+             const pDate = new Date(p.date);
+             if (start && pDate < start) return;
+             if (end && pDate > end) return;
+
              // Ensure date consistency
              const dateKey = p.date; 
              if (!stats[dateKey]) {
@@ -50,21 +63,94 @@ const RecyclingVolumeView: React.FC<{
         return Object.entries(stats)
             .map(([date, data]) => ({ date, ...data }))
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [pickups]);
+    }, [pickups, filterRange]);
+
+    const handleExport = () => {
+        if (volumeData.length === 0) {
+            alert("No data available to export for the selected range.");
+            return;
+        }
+
+        let csvContent = "data:text/csv;charset=utf-8,Date,Total Weight (kg),Count,Composition\n";
+        
+        volumeData.forEach(day => {
+            const compString = Object.entries(day.categories).map(([k,v]) => `${k}: ${v.toFixed(1)}kg`).join('; ');
+            const row = [
+                day.date,
+                day.totalWeight,
+                day.count,
+                `"${compString}"`
+            ].join(",");
+            csvContent += row + "\n";
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `recycling_volume_export_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     return (
         <div className="space-y-6 animate-fade-in h-full flex flex-col">
-            <div className="flex items-center gap-2 mb-2">
-                <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                    <ArrowLeft className="w-6 h-6 text-gray-600" />
+            <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                    <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                        <ArrowLeft className="w-6 h-6 text-gray-600" />
+                    </button>
+                    <h2 className="text-lg font-bold text-gray-900">Recycling Volume</h2>
+                </div>
+                <button onClick={handleExport} className="p-2 bg-gray-100 rounded-full text-gray-600 hover:bg-gray-200" title="Export CSV">
+                    <Download className="w-5 h-5" />
                 </button>
-                <h2 className="text-lg font-bold text-gray-900">Recycling Volume</h2>
+            </div>
+
+            {/* Date Range Filter */}
+            <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 flex flex-wrap gap-3 items-center">
+                <Calendar className="w-4 h-4 text-gray-400" />
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-500">From:</span>
+                    <input 
+                        type="date" 
+                        value={filterRange.start}
+                        onChange={(e) => setFilterRange({...filterRange, start: e.target.value})}
+                        className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-green-500"
+                    />
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-500">To:</span>
+                    <input 
+                        type="date" 
+                        value={filterRange.end}
+                        onChange={(e) => setFilterRange({...filterRange, end: e.target.value})}
+                        className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-green-500"
+                    />
+                </div>
+                {(filterRange.start || filterRange.end) && (
+                    <button 
+                        onClick={() => setFilterRange({start: '', end: ''})}
+                        className="ml-auto text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded"
+                    >
+                        Clear Filter
+                    </button>
+                )}
+            </div>
+
+            <div className="flex justify-between items-center px-2">
+                 <span className="text-xs font-bold text-gray-400 uppercase">
+                     Showing {volumeData.length} entries
+                 </span>
+                 <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                     Total: {volumeData.reduce((acc, curr) => acc + curr.totalWeight, 0).toLocaleString()} kg
+                 </span>
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-4">
                 {volumeData.length === 0 ? (
                     <div className="text-center py-10 text-gray-400">
-                        <p>No recycling data recorded yet.</p>
+                        <p>No recycling data recorded for this period.</p>
                     </div>
                 ) : (
                     volumeData.map((day) => (
