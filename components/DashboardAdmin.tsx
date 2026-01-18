@@ -438,14 +438,6 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       return { weight, earned, count: userPickups.length };
   };
 
-  // Helper: Get Total All-Time Balance (for default view)
-  const getTotalBalance = (targetUser: User) => {
-      const allTimeEarnings = pickups
-          .filter(p => p && p.userId === targetUser.id && p.status === 'Completed')
-          .reduce((sum, p) => sum + (p.earnedZoints || 0), 0);
-      return targetUser.zointsBalance + allTimeEarnings;
-  };
-
   // Helper: Get Detailed Stats for Profile View (No date filter applied usually, or re-use logic)
   const getUserStats = (targetUser: User) => {
       let userPickups: PickupTask[] = [];
@@ -828,9 +820,15 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
            {/* User List */}
            <div className="flex-1 overflow-y-auto space-y-3 pb-4">
                {filteredUsers.map(u => {
-                   const metrics = isDateFilterActive ? getFilteredMetrics(u) : { weight: u.totalRecycledKg || 0, earned: 0, count: 0 };
+                   const metrics = getFilteredMetrics(u);
                    // For default view, use the global balance, else use calculated earned in period
-                   const displayBalance = isDateFilterActive ? metrics.earned : getTotalBalance(u);
+                   const displayBalance = isDateFilterActive ? metrics.earned : u.zointsBalance;
+                   
+                   // Dynamic weight calculation: Base (if any) + All Pickups Sum (returned by metrics if no date filter)
+                   // If date filter is active, metrics.weight is only for that period.
+                   const displayWeight = isDateFilterActive 
+                        ? metrics.weight 
+                        : (u.totalRecycledKg || 0) + metrics.weight;
                    
                    return (
                        <div 
@@ -864,7 +862,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                            <div className="flex gap-4 mt-3 pt-3 border-t border-gray-50 text-xs">
                                <div className="flex-1">
                                    <span className="block text-gray-400">Recycled</span>
-                                   <span className="font-bold text-gray-800">{metrics.weight.toLocaleString()} kg</span>
+                                   <span className="font-bold text-gray-800">{displayWeight.toLocaleString()} kg</span>
                                </div>
                                <div className="flex-1">
                                    <span className="block text-gray-400">{isDateFilterActive ? 'Earned' : 'Balance'}</span>
