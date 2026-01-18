@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Recycle, Building2, Truck, User as UserIcon, ArrowLeft, AlertTriangle, Lock, Eye, EyeOff, KeyRound, Mail, CheckCircle, ChevronDown } from 'lucide-react';
 
 interface AuthProps {
-  onLogin: (userId: string) => void;
+  onLogin: (userId: string, token: string) => void;
 }
 
 type AuthView = 'landing' | 'login' | 'signup_household' | 'signup_org' | 'signup_verify' | 'forgot_password_request' | 'forgot_password_verify';
@@ -75,7 +75,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setIsSubmitting(true);
     
     try {
-        const user = await login(loginEmail, loginPassword);
+        const { user, token } = await login(loginEmail, loginPassword);
         
         if (!user.isActive) {
             setValidationError("Account is suspended. Please contact support.");
@@ -92,7 +92,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             }
         }
 
-        onLogin(user.id);
+        onLogin(user.id, token);
     } catch (error: any) {
         console.error("Login Error", error);
         setValidationError(error.message || "Invalid email or password.");

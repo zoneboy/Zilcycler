@@ -17,7 +17,8 @@ interface AppContextType {
   updateWasteRates: (newRates: WasteRates) => void;
   updateSysConfig: (config: SystemConfig) => void;
   updateUser: (id: string, updates: Partial<User>) => void;
-  login: (email: string, password: string) => Promise<User>;
+  login: (email: string, password: string) => Promise<{ user: User; token: string }>;
+  verifySession: (token: string) => Promise<{ userId: string; valid: boolean }>;
   requestPasswordReset: (email: string) => Promise<void>;
   resetPassword: (email: string, otp: string, newPassword: string) => Promise<void>;
   initiateChangePassword: (userId: string, currentPassword: string) => Promise<void>;
@@ -106,7 +107,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     fetchAllData();
   }, []);
 
-  const login = async (email: string, password: string): Promise<User> => {
+  const login = async (email: string, password: string): Promise<{ user: User; token: string }> => {
       const response = await fetch('/api/auth/login', {
           method: 'POST',
           body: JSON.stringify({ email, password })
@@ -115,6 +116,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!response.ok) {
           const err = await response.json();
           throw new Error(err.error || 'Login failed');
+      }
+
+      return await response.json();
+  };
+
+  const verifySession = async (token: string): Promise<{ userId: string; valid: boolean }> => {
+      const response = await fetch('/api/auth/verify', {
+          method: 'GET',
+          headers: {
+              'Authorization': `Bearer ${token}`
+          }
+      });
+
+      if (!response.ok) {
+          throw new Error('Invalid or expired session');
       }
 
       return await response.json();
@@ -355,7 +371,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }
 
   return (
-    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, certificates, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, registerUser, sendSignupVerification, login, requestPasswordReset, resetPassword, initiateChangePassword, confirmChangePassword, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost, addCertificate }}>
+    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, certificates, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, registerUser, sendSignupVerification, login, verifySession, requestPasswordReset, resetPassword, initiateChangePassword, confirmChangePassword, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost, addCertificate }}>
       {children}
     </AppContext.Provider>
   );

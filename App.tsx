@@ -18,46 +18,68 @@ import Certificates from './components/Certificates';
 import { Home, FileText, Settings as SettingsIcon, LogOut, ArrowLeft, Building2, Wallet } from 'lucide-react';
 
 const MainApp: React.FC = () => {
-  const { users, loading } = useApp();
+  const { users, loading, verifySession } = useApp();
   
-  // Initialize state from localStorage
-  const [sessionUserId, setSessionUserId] = useState<string | null>(() => {
-      return localStorage.getItem('zilcycler_session_id');
-  });
-  
-  // Set initial screen based on session existence
-  const [currentScreen, setCurrentScreen] = useState<Screen>(() => {
-      return localStorage.getItem('zilcycler_session_id') ? Screen.DASHBOARD : Screen.AUTH;
+  // Initialize state from localStorage (Token based)
+  const [sessionToken, setSessionToken] = useState<string | null>(() => {
+      return localStorage.getItem('zilcycler_token');
   });
 
-  const handleLogin = (userId: string) => {
-    localStorage.setItem('zilcycler_session_id', userId);
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
+  
+  // Set initial screen
+  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.AUTH);
+  
+  // Track if we are actively verifying a token to show a spinner instead of the login screen
+  const [isVerifying, setIsVerifying] = useState(!!sessionToken);
+
+  const handleLogin = (userId: string, token: string) => {
+    localStorage.setItem('zilcycler_token', token);
+    setSessionToken(token);
     setSessionUserId(userId);
     setCurrentScreen(Screen.DASHBOARD);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('zilcycler_session_id');
+    localStorage.removeItem('zilcycler_token');
+    setSessionToken(null);
     setSessionUserId(null);
     setCurrentScreen(Screen.AUTH);
   };
 
-  // Validate session when users are loaded
+  // Validate session when app loads
   useEffect(() => {
-      if (!loading && sessionUserId) {
-          const validUser = users.find(u => u.id === sessionUserId);
-          if (!validUser) {
-              // User ID in storage but not in DB (deleted or invalid)
-              handleLogout();
+      const restoreSession = async () => {
+          if (!sessionToken) {
+              setIsVerifying(false);
+              return;
           }
-      }
-  }, [loading, users, sessionUserId]);
+          
+          try {
+              // Verify the token with the backend
+              const { userId } = await verifySession(sessionToken);
+              setSessionUserId(userId);
+              setCurrentScreen(Screen.DASHBOARD);
+          } catch (e) {
+              console.error("Invalid session", e);
+              // Invalid token, clear it
+              handleLogout();
+          } finally {
+              setIsVerifying(false);
+          }
+      };
 
-  if (loading) {
+      if (!loading) {
+          restoreSession();
+      }
+  }, [loading, sessionToken]); // Dependency on sessionToken ensures re-run if it changes
+
+  // Loading state (Global Data Loading OR Session Verification)
+  if (loading || isVerifying) {
        return (
         <div className="h-screen w-full flex flex-col items-center justify-center text-green-800 bg-gray-50 dark:bg-gray-900">
            <div className="w-8 h-8 border-4 border-green-200 border-t-green-700 rounded-full animate-spin mb-4"></div>
-           <span className="font-bold dark:text-white">Initializing Zilcycler...</span>
+           <span className="font-bold dark:text-white">{loading ? 'Initializing Zilcycler...' : 'Verifying Session...'}</span>
         </div>
       );
   }

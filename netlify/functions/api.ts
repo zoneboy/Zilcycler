@@ -1,6 +1,7 @@
 import { query } from './db';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
+import jwt from 'jsonwebtoken';
 
 // Helper for standard response
 const response = (statusCode: number, body: any) => ({
@@ -11,6 +12,8 @@ const response = (statusCode: number, body: any) => ({
   },
   body: JSON.stringify(body)
 });
+
+const JWT_SECRET = process.env.JWT_SECRET || 'zilcycler-super-secret-key-change-in-prod';
 
 // Configure Nodemailer Transporter
 // Note: These values are read automatically from Netlify Environment Variables in production
@@ -80,7 +83,14 @@ export const handler = async (event: any) => {
             return response(401, { error: "Invalid email or password" });
         }
 
-        // 3. Return user info (excluding password)
+        // 3. Generate JWT Token
+        const token = jwt.sign(
+            { userId: user.id, role: user.role, email: user.email },
+            JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        // 4. Return user info and token
         const userObj = {
             id: user.id,
             name: user.name,
@@ -102,7 +112,25 @@ export const handler = async (event: any) => {
             }
         };
 
-        return response(200, userObj);
+        return response(200, { user: userObj, token });
+    }
+
+    // --- TOKEN VERIFICATION (NEW) ---
+    if (cleanPath === 'auth/verify' && method === 'GET') {
+        const authHeader = event.headers.authorization || event.headers.Authorization;
+        
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return response(401, { error: 'Missing or invalid authentication token' });
+        }
+
+        const token = authHeader.split(' ')[1];
+
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET) as any;
+            return response(200, { userId: decoded.userId, valid: true });
+        } catch (err) {
+            return response(401, { error: 'Invalid or expired token' });
+        }
     }
 
     // --- SIGNUP VERIFICATION (NEW) ---
