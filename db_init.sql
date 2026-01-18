@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     total_recycled_kg DECIMAL(10, 2) DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
     bank_name VARCHAR(100),
-    account_number VARCHAR(50),
+    account_number TEXT, -- Changed to TEXT to support encrypted strings
     account_name VARCHAR(255),
     gender VARCHAR(50),
     address TEXT,
@@ -27,6 +27,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(50);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS industry VARCHAR(100);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS esg_score VARCHAR(10);
+-- Ensure account_number allows long text (for encryption) if it was previously varchar
+ALTER TABLE users ALTER COLUMN account_number TYPE TEXT;
 
 -- Password Resets Table
 CREATE TABLE IF NOT EXISTS password_resets (

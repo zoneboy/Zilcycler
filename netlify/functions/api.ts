@@ -1,5 +1,5 @@
 import { query } from './db';
-import crypto, { randomUUID } from 'crypto';
+import crypto, { randomUUID, createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
 import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
 import { Ratelimit } from '@upstash/ratelimit';
@@ -17,6 +17,58 @@ const response = (statusCode: number, body: any) => ({
 });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'zilcycler-super-secret-key-change-in-prod';
+
+// --- ENCRYPTION UTILS ---
+// Use a consistent key derived from env var. 
+// In prod, ENCRYPTION_KEY should be set explicitly.
+const ENCRYPTION_SECRET = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-fallback-secret-salt-key';
+const ENCRYPTION_KEY = scryptSync(ENCRYPTION_SECRET, 'salt', 32); // 32 bytes for aes-256-gcm
+
+const encrypt = (text: string) => {
+    if (!text) return text;
+    try {
+        const iv = randomBytes(16);
+        const cipher = createCipheriv('aes-256-gcm', ENCRYPTION_KEY, iv);
+        let encrypted = cipher.update(text, 'utf8', 'hex');
+        encrypted += cipher.final('hex');
+        const tag = cipher.getAuthTag();
+        return JSON.stringify({
+            iv: iv.toString('hex'),
+            content: encrypted,
+            tag: tag.toString('hex')
+        });
+    } catch (e) {
+        console.error("Encryption error", e);
+        return text; // Fail safe, though technically insecure if fallback happens silently, but prevents data loss
+    }
+};
+
+const decrypt = (text: string) => {
+    if (!text) return text;
+    try {
+        // Attempt to parse as JSON (new format)
+        // If it's legacy plain text, JSON.parse will likely throw or return structure missing keys
+        let parsed;
+        try {
+            parsed = JSON.parse(text);
+        } catch (e) {
+            return text; // Assume legacy plain text
+        }
+
+        const { iv, content, tag } = parsed;
+        if (!iv || !content || !tag) return text; // Not our format
+
+        const decipher = createDecipheriv('aes-256-gcm', ENCRYPTION_KEY, Buffer.from(iv, 'hex'));
+        decipher.setAuthTag(Buffer.from(tag, 'hex'));
+        let decrypted = decipher.update(content, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return decrypted;
+    } catch (e) {
+        // If decryption fails (wrong key or corrupted), return raw or empty
+        console.error("Decryption error", e);
+        return text; 
+    }
+};
 
 // --- AUTH MIDDLEWARE ---
 const getAuth = (headers: any) => {
@@ -145,7 +197,7 @@ export const handler = async (event: any) => {
             esgScore: dbUser.esg_score,
             bankDetails: {
                 bankName: dbUser.bank_name,
-                accountNumber: dbUser.account_number,
+                accountNumber: decrypt(dbUser.account_number), // Decrypt on read
                 accountName: dbUser.account_name
             }
         };
@@ -487,7 +539,7 @@ export const handler = async (event: any) => {
                     esgScore: u.esg_score,
                     bankDetails: {
                         bankName: u.bank_name,
-                        accountNumber: u.account_number,
+                        accountNumber: decrypt(u.account_number), // Decrypt on read
                         accountName: u.account_name
                     },
                     createdAt: u.created_at
@@ -543,9 +595,11 @@ export const handler = async (event: any) => {
           if (updates.avatar !== undefined) await query('UPDATE users SET avatar = $1 WHERE id = $2', [updates.avatar, id]);
           if (updates.esgScore !== undefined) await query('UPDATE users SET esg_score = $1 WHERE id = $2', [updates.esgScore, id]);
           if (updates.bankDetails) {
+              // Encrypt Account Number before storage
+              const encryptedAccNum = encrypt(updates.bankDetails.accountNumber);
               await query(
                   'UPDATE users SET bank_name = $1, account_number = $2, account_name = $3 WHERE id = $4',
-                  [updates.bankDetails.bankName, updates.bankDetails.accountNumber, updates.bankDetails.accountName, id]
+                  [updates.bankDetails.bankName, encryptedAccNum, updates.bankDetails.accountName, id]
               );
           }
           return response(200, { success: true });
