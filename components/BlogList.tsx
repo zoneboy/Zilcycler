@@ -53,23 +53,26 @@ const BlogList: React.FC = () => {
         )}
       </div>
 
-      {/* Blog Detail Modal - FLEX COLUMN FIX */}
+      {/* Blog Detail Modal - FIXED SCROLL STRUCTURE */}
       {selectedBlog && (
-          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedBlog(null)}></div>
-              <div className="bg-white dark:bg-gray-900 w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl relative z-10 flex flex-col max-h-[85vh] animate-fade-in-up">
-                 {/* Sticky Header with Close Button */}
-                 <div className="absolute top-4 right-4 z-20">
-                     <button onClick={() => setSelectedBlog(null)} className="p-2 bg-white/80 dark:bg-black/50 backdrop-blur rounded-full hover:bg-white dark:hover:bg-gray-800 transition-colors shadow-sm">
-                         <X className="w-5 h-5 text-gray-800 dark:text-white" />
+              <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-2xl shadow-2xl relative z-10 flex flex-col max-h-[80vh] animate-fade-in-up">
+                 
+                 {/* Sticky Header with Close Button (Overlay on Image style or solid bar) */}
+                 {/* Using solid bar for better scrolling logic separation */}
+                 <div className="flex-none flex justify-between items-center p-4 border-b border-gray-100 dark:border-gray-800">
+                     <h3 className="font-bold text-gray-800 dark:text-white line-clamp-1">{selectedBlog.title}</h3>
+                     <button onClick={() => setSelectedBlog(null)} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                         <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                      </button>
                  </div>
                  
                  {/* Scrollable Body */}
-                 <div className="overflow-y-auto">
-                     <img src={selectedBlog.image} className="w-full h-64 object-cover" alt={selectedBlog.title} />
+                 <div className="flex-1 overflow-y-auto">
+                     <img src={selectedBlog.image} className="w-full h-56 object-cover" alt={selectedBlog.title} />
                      
-                     <div className="p-6 sm:p-8">
+                     <div className="p-6">
                          <span className="text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded-full uppercase tracking-wider mb-3 inline-block">
                             {selectedBlog.category}
                          </span>

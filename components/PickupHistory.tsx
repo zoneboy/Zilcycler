@@ -171,13 +171,14 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
         )}
       </div>
 
-      {/* Detail Modal - FLEX COLUMN FIX */}
+      {/* Detail Modal - FIXED SCROLL STRUCTURE */}
       {selectedPickup && (
-          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedPickup(null)}></div>
-              <div className="bg-white dark:bg-gray-800 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl relative z-10 flex flex-col max-h-[85vh] animate-fade-in-up">
+              <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl relative z-10 flex flex-col max-h-[80vh] animate-fade-in-up">
+                   
                    {/* Sticky Header */}
-                   <div className="flex justify-between items-center p-6 border-b border-gray-100 dark:border-gray-700 shrink-0">
+                   <div className="flex-none flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700">
                        <h3 className="font-bold text-gray-900 dark:text-white">Pickup Details</h3>
                        <button onClick={() => setSelectedPickup(null)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
                            <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
@@ -185,7 +186,7 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
                    </div>
 
                    {/* Scrollable Body */}
-                   <div className="overflow-y-auto p-6">
+                   <div className="flex-1 overflow-y-auto p-5">
                        <div className="space-y-6">
                            <div className="flex items-center justify-between">
                                <div>
