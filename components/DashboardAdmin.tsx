@@ -9,7 +9,7 @@ interface Props {
   onLogout: () => void;
 }
 
-type AdminView = 'DASHBOARD' | 'USERS' | 'SETTINGS' | 'PICKUPS' | 'DAILY_STATS' | 'REQUESTS' | 'TIPS' | 'CERTIFICATES';
+type AdminView = 'DASHBOARD' | 'USERS' | 'SETTINGS' | 'PICKUPS' | 'DAILY_STATS' | 'REQUESTS' | 'TIPS' | 'CERTIFICATES' | 'RECYCLING_VOLUME';
 type SortOption = 'NAME' | 'WEIGHT_DESC' | 'WEIGHT_ASC';
 
 const COLORS = ['#16a34a', '#2563eb', '#ca8a04', '#dc2626', '#9333ea', '#0891b2'];
@@ -530,6 +530,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
 
              {/* Navigation Links */}
              <div className="space-y-2">
+                 <MenuLink icon={<Scale className="w-5 h-5" />} label="Recycling Volume" onClick={() => setCurrentView('RECYCLING_VOLUME')} />
                  <MenuLink icon={<Users className="w-5 h-5" />} label="User Management" onClick={() => setCurrentView('USERS')} />
                  <MenuLink icon={<Truck className="w-5 h-5" />} label="Pickup Operations" onClick={() => setCurrentView('PICKUPS')} />
                  <MenuLink icon={<Banknote className="w-5 h-5" />} label="Redemption Requests" onClick={() => setCurrentView('REQUESTS')} />
@@ -540,6 +541,91 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
         </div>
     );
 };
+
+  const renderRecyclingVolume = () => {
+    // Aggregation Logic
+    const volumeData = useMemo(() => {
+        const stats: Record<string, { totalWeight: number; count: number; categories: Record<string, number> }> = {};
+        
+        pickups.forEach(p => {
+             if (p.status !== 'Completed') return;
+             // Ensure date consistency
+             const dateKey = p.date; 
+             if (!stats[dateKey]) {
+                 stats[dateKey] = { totalWeight: 0, count: 0, categories: {} };
+             }
+             
+             const entry = stats[dateKey];
+             entry.totalWeight += (p.weight || 0);
+             entry.count += 1;
+
+             if (p.collectionDetails && p.collectionDetails.length > 0) {
+                 p.collectionDetails.forEach(d => {
+                     entry.categories[d.category] = (entry.categories[d.category] || 0) + d.weight;
+                 });
+             } else {
+                 // Fallback
+                 const cat = p.items ? p.items.split(',')[0].trim() : 'Other';
+                 entry.categories[cat] = (entry.categories[cat] || 0) + (p.weight || 0);
+             }
+        });
+
+        return Object.entries(stats)
+            .map(([date, data]) => ({ date, ...data }))
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [pickups]);
+
+    return (
+        <div className="space-y-6 animate-fade-in h-full flex flex-col">
+            <div className="flex items-center gap-2 mb-2">
+                <button onClick={() => setCurrentView('DASHBOARD')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                    <ArrowLeft className="w-6 h-6 text-gray-600" />
+                </button>
+                <h2 className="text-lg font-bold text-gray-900">Recycling Volume</h2>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4">
+                {volumeData.length === 0 ? (
+                    <div className="text-center py-10 text-gray-400">
+                        <p>No recycling data recorded yet.</p>
+                    </div>
+                ) : (
+                    volumeData.map((day) => (
+                        <div key={day.date} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-green-200 transition-colors">
+                            <div className="flex justify-between items-start mb-3">
+                                <div>
+                                    <h3 className="font-bold text-gray-800 text-lg">
+                                        {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                                    </h3>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                                            {day.totalWeight.toLocaleString()} kg Total
+                                        </span>
+                                        <span className="text-xs text-gray-400 font-medium">
+                                            {day.count} Pickups
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                                <p className="text-xs font-bold text-gray-400 uppercase mb-2">Composition</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {Object.entries(day.categories).map(([cat, w]) => (
+                                        <div key={cat} className="text-xs flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-gray-100 shadow-sm">
+                                            <span className="text-gray-600 font-medium">{cat}</span>
+                                            <span className="font-bold text-gray-900">{w.toFixed(1)}kg</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+  };
 
   const renderRequests = () => {
       // Logic for filtering
@@ -1395,6 +1481,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
 
       <div className="flex-1 overflow-y-auto">
           {currentView === 'DASHBOARD' && renderDashboard()}
+          {currentView === 'RECYCLING_VOLUME' && renderRecyclingVolume()}
           {currentView === 'REQUESTS' && renderRequests()}
           {currentView === 'USERS' && renderUserManagement()}
           {currentView === 'SETTINGS' && renderSettings()}
