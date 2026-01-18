@@ -76,7 +76,7 @@ const DashboardStaff: React.FC<Props> = ({ user, onLogout }) => {
         </div>
         <div className="flex items-center gap-3">
              <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <div className="w-2 h-2 bg-green-50 rounded-full animate-pulse"></div>
                 Live
             </div>
              <button 
@@ -218,19 +218,19 @@ const DashboardStaff: React.FC<Props> = ({ user, onLogout }) => {
         )}
       </div>
 
-      {/* Driver Assignment Modal */}
+      {/* Driver Assignment Modal - Unified Scroll Structure */}
       {assignModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setAssignModalOpen(false)}></div>
-           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-[80vh]">
-               <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up p-6 max-h-[90vh] overflow-y-auto">
+               <div className="flex justify-between items-center mb-4">
                    <h3 className="font-bold text-gray-900">Assign Driver</h3>
                    <button onClick={() => setAssignModalOpen(false)} className="p-2 bg-gray-100 rounded-full">
                        <X className="w-5 h-5 text-gray-600" />
                    </button>
                </div>
                
-               <div className="p-4 overflow-y-auto space-y-2">
+               <div className="space-y-2">
                    {drivers.length === 0 ? (
                        <p className="text-center text-gray-400 text-sm py-8">No active collectors found.</p>
                    ) : (

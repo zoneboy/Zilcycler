@@ -238,13 +238,14 @@ const DashboardCollector: React.FC<Props> = ({ user, onLogout }) => {
         </button>
       </div>
 
-      {/* Detail Modal */}
+      {/* Detail Modal - Unified Scroll Structure */}
       {selectedTask && (
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={closeModal}></div>
-           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-[90vh]">
-               {/* Modal Header with Map Placeholder */}
-               <div className="h-40 bg-gray-200 rounded-t-3xl sm:rounded-t-3xl relative overflow-hidden shrink-0">
+           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-[90vh] overflow-y-auto">
+               
+               {/* Header Content Inside Scroll Area */}
+               <div className="h-40 bg-gray-200 relative overflow-hidden shrink-0">
                     <div className="absolute inset-0 bg-[url('https://upload.wikimedia.org/wikipedia/commons/e/ec/OpenStreetMap_Mapnik_example.png')] bg-cover opacity-50"></div>
                     <button 
                         onClick={closeModal}
@@ -259,7 +260,7 @@ const DashboardCollector: React.FC<Props> = ({ user, onLogout }) => {
                     </div>
                </div>
 
-               <div className="p-6 space-y-6 overflow-y-auto">
+               <div className="p-6 space-y-6">
                    <div className="flex items-center justify-between">
                        <div>
                            <p className="text-xs text-gray-400 font-bold uppercase mb-1">Status</p>

@@ -171,19 +171,19 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
         )}
       </div>
 
-      {/* Detail Modal */}
+      {/* Detail Modal - Unified Scroll Structure */}
       {selectedPickup && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedPickup(null)}></div>
-              <div className="bg-white dark:bg-gray-800 rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-[90vh]">
-                   <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+              <div className="bg-white dark:bg-gray-800 rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up p-6 max-h-[90vh] overflow-y-auto">
+                   <div className="flex justify-between items-center mb-6">
                        <h3 className="font-bold text-gray-900 dark:text-white">Pickup Details</h3>
                        <button onClick={() => setSelectedPickup(null)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
                            <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
                        </button>
                    </div>
 
-                   <div className="p-6 overflow-y-auto space-y-6">
+                   <div className="space-y-6">
                        <div className="flex items-center justify-between">
                            <div>
                                <p className="text-xs text-gray-400 font-bold uppercase mb-1">Status</p>
