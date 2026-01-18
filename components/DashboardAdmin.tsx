@@ -1026,7 +1026,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
            {selectedUser && (
               <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
                   <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedUser(null)}></div>
-                  <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg relative z-10 shadow-2xl animate-fade-in-up p-6 max-h-[90vh] overflow-y-auto">
+                  <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg relative z-10 shadow-2xl animate-fade-in-up p-6 max-h-[85vh] overflow-y-auto">
                       <div className="flex justify-between items-start mb-6">
                           <div className="flex items-center gap-4">
                               <img src={selectedUser.avatar || `https://ui-avatars.com/api/?name=${selectedUser.name}`} className="w-16 h-16 rounded-full border-4 border-gray-50" />
@@ -1112,7 +1112,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
            {isAddUserOpen && (
                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsAddUserOpen(false)}></div>
-                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
                        <h3 className="text-lg font-bold text-gray-900 mb-4">Add {addingRole === UserRole.COLLECTOR ? 'Collector' : 'Staff'}</h3>
                        <form onSubmit={handleAddUser} className="space-y-3">
                            <input type="text" placeholder="Full Name" required className="w-full p-3 bg-gray-50 border rounded-xl" value={newUserForm.name} onChange={e => setNewUserForm({...newUserForm, name: e.target.value})} />
@@ -1237,7 +1237,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
             {selectedPickup && (
                 <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
                   <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedPickup(null)}></div>
-                  <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+                  <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
                       <div className="flex justify-between items-center mb-6">
                           <h3 className="font-bold text-lg text-gray-900">Pickup Details</h3>
                           <button onClick={() => setSelectedPickup(null)}><X className="w-5 h-5 text-gray-500" /></button>
@@ -1380,7 +1380,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
            {isAddTipOpen && (
                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsAddTipOpen(false)}></div>
-                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
                        <h3 className="text-lg font-bold text-gray-900 mb-4">Add New Tip</h3>
                        <form onSubmit={handleAddTip} className="space-y-3">
                            <input type="text" placeholder="Title" required className="w-full p-3 bg-gray-50 border rounded-xl text-sm" value={newTip.title} onChange={e => setNewTip({...newTip, title: e.target.value})} />
@@ -1438,7 +1438,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
            {isCertModalOpen && (
                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsCertModalOpen(false)}></div>
-                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
                        <h3 className="text-lg font-bold text-gray-900 mb-4">Issue Certificate</h3>
                        <form onSubmit={handleAddCertificate} className="space-y-3">
                            <div>

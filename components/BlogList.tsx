@@ -57,7 +57,7 @@ const BlogList: React.FC = () => {
       {selectedBlog && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedBlog(null)}></div>
-              <div className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full max-w-lg relative z-10 shadow-2xl animate-fade-in-up max-h-[90vh] overflow-y-auto">
+              <div className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full max-w-lg relative z-10 shadow-2xl animate-fade-in-up max-h-[85vh] overflow-y-auto">
                  <button onClick={() => setSelectedBlog(null)} className="absolute top-4 right-4 p-2 bg-white/50 dark:bg-black/50 backdrop-blur rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors z-20">
                      <X className="w-5 h-5 text-gray-800 dark:text-white" />
                  </button>
