@@ -2,8 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, UserRole, WasteRates, PickupTask, RedemptionRequest, BlogPost, Certificate } from '../types';
 import { useApp } from '../context/AppContext';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
-import { Users, Settings, LogOut, ArrowLeft, Ban, CheckCircle, ShieldAlert, Save, Coins, Search, Mail, Phone, ChevronRight, Truck, Calendar, ArrowDownUp, X, Filter, MapPin, Package, User as UserIcon, AlertTriangle, ImageIcon, Download, Loader2, Scale, FileText, Banknote, Lock, Landmark, UserPlus, BookOpen, Trash2, Plus, Image as ImageIcon2, Shield, FileBadge, Upload, Leaf, Sparkles, BrainCircuit } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { Users, Settings, LogOut, ArrowLeft, Ban, CheckCircle, ShieldAlert, Save, Coins, Search, Mail, Phone, ChevronRight, Truck, Calendar, ArrowDownUp, X, Filter, MapPin, Package, User as UserIcon, AlertTriangle, ImageIcon, Download, Loader2, Scale, FileText, Banknote, Lock, Landmark, UserPlus, BookOpen, Trash2, Plus, Image as ImageIcon2, Shield, FileBadge, Upload, Leaf } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -80,11 +79,6 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       };
   });
 
-  // AI Insights State
-  const [showAIInsights, setShowAIInsights] = useState(false);
-  const [aiInsightsResult, setAiInsightsResult] = useState('');
-  const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
-
   // Settings State - Rates
   const [editedRates, setEditedRates] = useState<WasteRates>(wasteRates);
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
@@ -97,60 +91,6 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
   }, [pickupFilter, pickupSearch]);
 
   // --- ACTIONS ---
-
-  const generateAIInsights = async () => {
-    setIsGeneratingInsights(true);
-    setShowAIInsights(true);
-    setAiInsightsResult(''); // Clear previous result
-
-    try {
-        // Calculate metrics
-        const totalPickups = pickups.length;
-        const completedPickups = pickups.filter(p => p.status === 'Completed');
-        const totalWeight = completedPickups.reduce((sum, p) => sum + (p.weight || 0), 0);
-        const totalZoints = completedPickups.reduce((sum, p) => sum + (p.earnedZoints || 0), 0);
-        
-        const statusBreakdown = pickups.reduce((acc, p) => {
-            acc[p.status] = (acc[p.status] || 0) + 1;
-            return acc;
-        }, {} as Record<string, number>);
-
-        const categoryBreakdown = completedPickups.reduce((acc, p) => {
-            if (p.collectionDetails) {
-                p.collectionDetails.forEach(d => {
-                    acc[d.category] = (acc[d.category] || 0) + d.weight;
-                });
-            } else if (p.weight) {
-                 // Fallback if no details
-                 const cat = p.items.split(',')[0].trim() || 'Unsorted'; 
-                 acc[cat] = (acc[cat] || 0) + p.weight;
-            }
-            return acc;
-        }, {} as Record<string, number>);
-
-        const summary = {
-            totalPickups,
-            totalWeight,
-            totalZoints,
-            statusBreakdown,
-            categoryBreakdown
-        };
-
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: `Analyze the following recycling data for 'Zilcycler' and provide 3 key insights and 1 actionable recommendation for the admin to improve efficiency or engagement.
-            Data: ${JSON.stringify(summary)}`,
-        });
-        
-        setAiInsightsResult(response.text || "No insights generated.");
-    } catch (error) {
-        console.error("AI Error", error);
-        setAiInsightsResult("Failed to generate insights. Please try again.");
-    } finally {
-        setIsGeneratingInsights(false);
-    }
-  };
 
   const toggleUserStatus = (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
@@ -462,14 +402,17 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
     return sortedStats.slice(-7);
   }, [pickups]);
 
-  // Simplified handler attached directly to Bar component
+  // Handler attached directly to Bar component
   const handleBarClick = (data: any) => {
-    if (data) {
+    // Recharts usually wraps custom data properties in a 'payload' object
+    const actualData = data && data.payload ? data.payload : data;
+    
+    if (actualData) {
         setSelectedDayStats({
-            date: data.fullDate,
-            weight: data.value,
-            count: data.count,
-            items: data.items
+            date: actualData.fullDate || new Date().toISOString(),
+            weight: actualData.value || 0,
+            count: actualData.count || 0,
+            items: actualData.items || []
         });
         setCurrentView('DAILY_STATS');
     }
@@ -657,20 +600,12 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                      </div>
                  </div>
 
-                 <div className="flex gap-2">
-                    <button 
-                        onClick={handleExportReport}
-                        className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition-colors"
-                    >
-                        <Download className="w-4 h-4" /> Export CSV
-                    </button>
-                    <button 
-                        onClick={generateAIInsights}
-                        className="flex-1 bg-purple-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-purple-700 transition-colors"
-                    >
-                        <Sparkles className="w-4 h-4" /> AI Insights
-                    </button>
-                 </div>
+                 <button 
+                    onClick={handleExportReport}
+                    className="w-full bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition-colors"
+                 >
+                     <Download className="w-4 h-4" /> Export Data (CSV)
+                 </button>
              </div>
 
              {/* Navigation Links */}
@@ -682,40 +617,6 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                  <MenuLink icon={<FileBadge className="w-5 h-5" />} label="Certificates" onClick={() => setCurrentView('CERTIFICATES')} />
                  <MenuLink icon={<Settings className="w-5 h-5" />} label="System Settings" onClick={() => setCurrentView('SETTINGS')} />
              </div>
-
-             {/* AI Insights Modal */}
-             {showAIInsights && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowAIInsights(false)}></div>
-                    <div className="bg-white rounded-2xl w-full max-w-lg relative z-10 shadow-2xl p-6 animate-fade-in-up max-h-[80vh] overflow-y-auto">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-bold text-purple-800 flex items-center gap-2">
-                                <BrainCircuit className="w-6 h-6" /> AI Analysis
-                            </h3>
-                            <button onClick={() => setShowAIInsights(false)} className="p-2 hover:bg-gray-100 rounded-full">
-                                <X className="w-5 h-5 text-gray-500" />
-                            </button>
-                        </div>
-
-                        {isGeneratingInsights ? (
-                            <div className="py-12 flex flex-col items-center justify-center text-center">
-                                <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mb-4"></div>
-                                <p className="text-gray-600 font-medium">Analyzing recycling data...</p>
-                                <p className="text-xs text-gray-400 mt-2">Connecting to Gemini AI</p>
-                            </div>
-                        ) : (
-                            <div className="prose prose-sm max-w-none text-gray-700">
-                                <div className="whitespace-pre-wrap leading-relaxed">
-                                    {aiInsightsResult}
-                                </div>
-                                <div className="mt-6 pt-4 border-t border-gray-100 text-xs text-gray-400 flex items-center justify-center gap-1">
-                                    <Sparkles className="w-3 h-3" /> Generated by Gemini 2.5 Flash
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-             )}
         </div>
     );
   };
@@ -968,7 +869,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                   <div className="grid grid-cols-2 gap-4 mt-4">
                       <div className="p-3 bg-green-50 rounded-xl">
                           <p className="text-xs text-green-600 uppercase font-bold">Total Weight</p>
-                          <p className="text-xl font-bold">{selectedDayStats.weight} kg</p>
+                          <p className="text-xl font-bold">{(selectedDayStats.weight || 0).toLocaleString()} kg</p>
                       </div>
                       <div className="p-3 bg-blue-50 rounded-xl">
                           <p className="text-xs text-blue-600 uppercase font-bold">Pickups</p>
@@ -978,7 +879,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
               </div>
               
               <h3 className="font-bold text-gray-700">Detailed Pickups</h3>
-              {selectedDayStats.items.map(p => (
+              {(selectedDayStats.items || []).map(p => (
                   <div key={p.id} className="bg-white p-4 rounded-xl border border-gray-100">
                       <div className="flex justify-between">
                           <span className="font-bold">{p.location}</span>
