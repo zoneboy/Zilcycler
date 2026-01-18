@@ -61,7 +61,7 @@ const WalletCard: React.FC<WalletCardProps> = ({ user, balance }) => {
       setView('PROCESSING');
       
       const newRequest: RedemptionRequest = {
-        id: `REQ-${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
+        id: '', // Server generated
         userId: user.id,
         userName: user.name,
         type: selectedType === 'Cash' ? 'Cash' : 'Charity',

@@ -193,13 +193,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const schedulePickup = async (task: PickupTask) => {
-    setPickups((prev) => [task, ...prev]);
     try {
-        await fetch('/api/pickups', {
+        const res = await fetch('/api/pickups', {
             method: 'POST',
             headers: getAuthHeaders(),
             body: JSON.stringify(task)
         });
+        const data = await res.json();
+        if (res.ok && data.id) {
+            const newTask = { ...task, id: data.id };
+            setPickups((prev) => [newTask, ...prev]);
+        }
     } catch (e) {
         console.error("Failed to schedule pickup", e);
     }
@@ -263,8 +267,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         throw new Error(`Registration failed: ${errorText}`);
     }
 
-    // Only update state if successful
-    setUsers((prev) => [user, ...prev]);
+    const data = await response.json();
+    // Only update state if successful, use server-generated ID
+    const newUser = { ...user, id: data.userId };
+    setUsers((prev) => [newUser, ...prev]);
   };
 
   const sendSignupVerification = async (email: string) => {
@@ -289,21 +295,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           throw new Error(err.error || 'Registration failed');
       }
 
-      setUsers((prev) => [user, ...prev]);
+      const data = await response.json();
+      const newUser = { ...user, id: data.userId };
+      setUsers((prev) => [newUser, ...prev]);
   };
 
   const createRedemptionRequest = async (req: RedemptionRequest) => {
-    setRedemptionRequests((prev) => [req, ...prev]);
-    setUsers((prevUsers) => prevUsers.map(u => 
-        (u && u.id === req.userId)
-        ? { ...u, zointsBalance: u.zointsBalance - req.amount } 
-        : u
-    ));
-    await fetch('/api/redemption', {
+    const res = await fetch('/api/redemption', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(req)
     });
+    const data = await res.json();
+    if(res.ok && data.id) {
+        const newReq = { ...req, id: data.id };
+        setRedemptionRequests((prev) => [newReq, ...prev]);
+        setUsers((prevUsers) => prevUsers.map(u => 
+            (u && u.id === req.userId)
+            ? { ...u, zointsBalance: u.zointsBalance - req.amount } 
+            : u
+        ));
+    }
   };
 
   const updateRedemptionStatus = async (id: string, status: 'Approved' | 'Rejected') => {
@@ -326,12 +338,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const addBlogPost = async (post: BlogPost) => {
-    setBlogPosts(prev => [post, ...prev]);
-    await fetch('/api/blog', {
+    const res = await fetch('/api/blog', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(post)
     });
+    const data = await res.json();
+    if(res.ok && data.id) {
+        setBlogPosts(prev => [{...post, id: data.id}, ...prev]);
+    }
   };
 
   const deleteBlogPost = async (id: string) => {
@@ -344,21 +359,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const sendMessage = async (msg: Message) => {
-      setMessages(prev => [...prev, msg]);
-      await fetch('/api/messages', {
+      const res = await fetch('/api/messages', {
           method: 'POST',
           headers: getAuthHeaders(),
           body: JSON.stringify(msg)
       });
+      const data = await res.json();
+      if(res.ok && data.id) {
+          setMessages(prev => [...prev, { ...msg, id: data.id }]);
+      }
   };
 
   const addCertificate = async (cert: Certificate) => {
-      setCertificates(prev => [cert, ...prev]);
-      await fetch('/api/certificates', {
+      const res = await fetch('/api/certificates', {
           method: 'POST',
           headers: getAuthHeaders(),
           body: JSON.stringify(cert)
       });
+      const data = await res.json();
+      if(res.ok && data.id) {
+          setCertificates(prev => [{...cert, id: data.id}, ...prev]);
+      }
   };
 
   const getPickupsByRole = (role: UserRole, userId?: string) => {

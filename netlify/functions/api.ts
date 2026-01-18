@@ -1,5 +1,5 @@
 import { query } from './db';
-import crypto from 'crypto';
+import crypto, { randomUUID } from 'crypto';
 import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
 
@@ -181,12 +181,15 @@ export const handler = async (event: any) => {
         if (new Date(otpCheck.rows[0].expires_at) < new Date()) return response(400, { error: "Code expired" });
 
         const passwordHash = hashPassword(password);
+        // Generate Server-Side ID
+        const userId = `u_${randomUUID()}`;
+
         await query(
             `INSERT INTO users (id, name, email, role, phone, avatar, password_hash, gender, address, industry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [regUser.id, regUser.name, regUser.email, regUser.role, regUser.phone, regUser.avatar, passwordHash, regUser.gender, regUser.address, regUser.industry]
+            [userId, regUser.name, regUser.email, regUser.role, regUser.phone, regUser.avatar || '', passwordHash, regUser.gender, regUser.address, regUser.industry]
         );
         await query('DELETE FROM password_resets WHERE email = $1', [regUser.email]);
-        return response(201, { message: "Account created" });
+        return response(201, { message: "Account created", userId });
     }
 
     if (cleanPath === 'auth/forgot-password' && method === 'POST') {
@@ -298,8 +301,9 @@ export const handler = async (event: any) => {
         if (method === 'POST') {
             if (!isAdminOrStaff) return response(403, { error: "Forbidden" });
             const p = body;
-            await query('INSERT INTO blog_posts (id, title, category, excerpt, image) VALUES ($1, $2, $3, $4, $5)', [p.id, p.title, p.category, p.excerpt, p.image]);
-            return response(201, { success: true });
+            const postId = `blog_${randomUUID()}`;
+            await query('INSERT INTO blog_posts (id, title, category, excerpt, image) VALUES ($1, $2, $3, $4, $5)', [postId, p.title, p.category, p.excerpt, p.image]);
+            return response(201, { success: true, id: postId });
         }
         if (method === 'DELETE') {
             if (!isAdminOrStaff) return response(403, { error: "Forbidden" });
@@ -344,11 +348,12 @@ export const handler = async (event: any) => {
         if (method === 'POST') {
             if (!isAdminOrStaff) return response(403, { error: "Forbidden" });
             const c = body;
+            const certId = `cert_${randomUUID()}`;
             await query(
                 'INSERT INTO certificates (id, org_id, org_name, month, year, url) VALUES ($1, $2, $3, $4, $5, $6)',
-                [c.id, c.orgId, c.orgName, c.month, c.year, c.url]
+                [certId, c.orgId, c.orgName, c.month, c.year, c.url]
             );
-            return response(201, { success: true });
+            return response(201, { success: true, id: certId });
         }
     }
 
@@ -382,13 +387,15 @@ export const handler = async (event: any) => {
       
       if (method === 'POST') {
         if (user.role !== 'ADMIN') return response(403, { error: "Only admins can create users manually" });
-        const { id, name, email, role, phone, password, gender, address, industry, avatar } = body;
+        const { name, email, role, phone, password, gender, address, industry, avatar } = body;
         const passwordHash = password ? hashPassword(password) : null;
+        const userId = `u_${randomUUID()}`;
+        
         await query(
             `INSERT INTO users (id, name, email, role, phone, avatar, password_hash, gender, address, industry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [id, name, email, role, phone, avatar || '', passwordHash, gender, address, industry]
+            [userId, name, email, role, phone, avatar || '', passwordHash, gender, address, industry]
         );
-        return response(201, { message: "User created" });
+        return response(201, { message: "User created", userId });
       }
 
       if (method === 'PUT') {
@@ -444,13 +451,15 @@ export const handler = async (event: any) => {
       if (method === 'POST') {
         const p = body;
         if (p.userId !== user.userId && !isAdminOrStaff) return response(403, { error: "Cannot schedule for others" });
+        
+        const pickupId = `P-${randomUUID().substring(0,8).toUpperCase()}`;
 
         await query(
             `INSERT INTO pickups (id, user_id, location, time, date, items, status, contact, phone_number, waste_image) 
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [p.id, p.userId, p.location, p.time, p.date, p.items, p.status, p.contact, p.phoneNumber, p.wasteImage]
+            [pickupId, p.userId, p.location, p.time, p.date, p.items, p.status, p.contact, p.phoneNumber, p.wasteImage]
         );
-        return response(201, { success: true });
+        return response(201, { success: true, id: pickupId });
       }
 
       if (method === 'PUT') {
@@ -496,15 +505,17 @@ export const handler = async (event: any) => {
             const r = body;
             if (r.userId !== user.userId) return response(403, { error: "Forbidden" });
 
+            const reqId = `REQ-${randomUUID().substring(0,8).toUpperCase()}`;
+
             await query('BEGIN');
             try {
                 await query(
                     `INSERT INTO redemption_requests (id, user_id, user_name, type, amount, status, date) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                    [r.id, r.userId, r.userName, r.type, r.amount, r.status, r.date]
+                    [reqId, r.userId, r.userName, r.type, r.amount, r.status, r.date]
                 );
                 await query(`UPDATE users SET zoints_balance = zoints_balance - $1 WHERE id = $2`, [r.amount, r.userId]);
                 await query('COMMIT');
-                return response(201, { success: true });
+                return response(201, { success: true, id: reqId });
             } catch (e) {
                 await query('ROLLBACK');
                 throw e;
@@ -541,11 +552,12 @@ export const handler = async (event: any) => {
         if (method === 'POST') {
             const m = body;
             if (m.senderId !== user.userId) return response(403, { error: "Identity mismatch" });
+            const msgId = `msg_${randomUUID()}`;
             await query(
                 'INSERT INTO messages (id, sender_id, receiver_id, content) VALUES ($1, $2, $3, $4)',
-                [m.id, m.senderId, m.receiverId, m.content]
+                [msgId, m.senderId, m.receiverId, m.content]
             );
-            return response(201, { success: true });
+            return response(201, { success: true, id: msgId });
         }
     }
 

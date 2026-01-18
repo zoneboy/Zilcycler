@@ -214,7 +214,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       setIsSubmitting(true);
 
       const newUser: User = {
-          id: `u_${Date.now().toString(36)}`,
+          id: '', // Server will generate
           name: signupData.fullName,
           email: signupData.email,
           phone: signupData.phone,

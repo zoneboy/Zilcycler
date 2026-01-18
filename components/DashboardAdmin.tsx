@@ -381,7 +381,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
   const handleAddUser = (e: React.FormEvent) => {
       e.preventDefault();
       const newUser: User = {
-          id: `u_${Math.random().toString(36).substr(2, 9)}`,
+          id: '', // Server generated
           name: newUserForm.name,
           email: newUserForm.email,
           phone: newUserForm.phone,
@@ -404,7 +404,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
   const handleAddTip = (e: React.FormEvent) => {
       e.preventDefault();
       const newPost: BlogPost = {
-          id: `blog_${Math.random().toString(36).substr(2, 9)}`,
+          id: '', // Server generated
           title: newTip.title,
           category: newTip.category,
           excerpt: newTip.excerpt,
@@ -421,7 +421,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       if (!org) return;
 
       const newCert: Certificate = {
-          id: `cert_${Date.now()}`,
+          id: '', // Server generated
           orgId: certForm.orgId,
           orgName: org.name,
           month: certForm.month,

@@ -48,7 +48,7 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
     const imageUrl = imageFile ? URL.createObjectURL(imageFile) : undefined;
 
     const newTask: PickupTask = {
-        id: `P-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+        id: '', // Server generated
         userId: user.id,
         location: address,
         time: time,

@@ -17,7 +17,7 @@ const Messages: React.FC = () => {
   // BUT realistically this component is rendered inside App.tsx which has the user.
   // We'll trust the main App passes the user ID down, but `Messages` is currently defined without props in the router switch.
   // To fix this cleanly without changing App.tsx routing structure significantly, we'll try to find the "active" user from context or local storage.
-  // Ideally, `Messages` should accept `user` prop. Let's assume the first active user for now or try to get it from context if we stored session there.
+  // Ideally, `Messages` should accept `user` prop. Let's assume the first active user for now or try to get it from context or local storage.
   // Since we don't have `currentUser` in AppContext, we'll implement a simple user picker for testing or assume 'u_current' if not provided.
   // WAIT: App.tsx renders Messages inside renderScreen(), but it doesn't pass the user! 
   // I will assume for now we need to grab the user ID from the parent component or modify App.tsx. 
@@ -85,7 +85,7 @@ export const MessagesWithUser: React.FC<MessagesProps> = ({ user }) => {
     if (!replyText.trim() || !selectedCorrespondentId) return;
     
     const newMsg: Message = {
-        id: `msg_${Date.now()}`,
+        id: '', // Server generated
         senderId: user.id,
         receiverId: selectedCorrespondentId,
         content: replyText,
