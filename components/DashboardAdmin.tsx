@@ -253,6 +253,81 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
     setVisiblePickupsCount(PICKUP_BATCH_SIZE);
   }, [pickupFilter, pickupSearch]);
 
+  // --- HELPERS (Moved Up) ---
+
+  // Check if date filtering is active
+  const isDateFilterActive = !!(dateRange.start && dateRange.end);
+
+  // Helper: Calculate metrics for a user within a specific date range (or all time if no range)
+  const getFilteredMetrics = (targetUser: User) => {
+      const start = dateRange.start ? new Date(dateRange.start) : null;
+      const end = dateRange.end ? new Date(dateRange.end) : null;
+      // Adjust end date to include the full day
+      if (end) end.setHours(23, 59, 59, 999);
+
+      // Filter global pickups
+      const userPickups = pickups.filter(p => {
+          if (!p) return false;
+          // Ownership check
+          const isOwner = targetUser.role === UserRole.COLLECTOR 
+              ? p.driver === targetUser.name 
+              : p.userId === targetUser.id;
+
+          if (!isOwner || p.status !== 'Completed') return false;
+
+          // Date Check
+          if (start && end) {
+              const taskDate = new Date(p.date);
+              return taskDate >= start && taskDate <= end;
+          }
+          return true;
+      });
+
+      const weight = userPickups.reduce((sum, p) => sum + (p.weight || 0), 0);
+      const earned = userPickups.reduce((sum, p) => sum + (p.earnedZoints || 0), 0);
+
+      return { weight, earned, count: userPickups.length };
+  };
+
+  // Helper: Get Detailed Stats for Profile View (No date filter applied usually, or re-use logic)
+  const getUserStats = (targetUser: User) => {
+      let userPickups: PickupTask[] = [];
+
+      if (targetUser.role === UserRole.COLLECTOR) {
+          userPickups = pickups.filter(p => p && p.driver === targetUser.name);
+      } else {
+          userPickups = pickups.filter(p => p && p.userId === targetUser.id);
+      }
+
+      const completed = userPickups.filter(p => p.status === 'Completed');
+      
+      const totalWeight = completed.reduce((sum, p) => sum + (p.weight || 0), 0);
+      const composition: {[key: string]: number} = {};
+      completed.forEach(p => {
+          if (p.collectionDetails) {
+              p.collectionDetails.forEach(d => {
+                  composition[d.category] = (composition[d.category] || 0) + d.weight;
+              });
+          } else {
+              const cat = p.items.split(' ')[0] || 'Other';
+              composition[cat] = (composition[cat] || 0) + (p.weight || 0);
+          }
+      });
+
+      const compositionData = Object.entries(composition).map(([name, value]) => ({ name, value }));
+      return { userPickups, completed, totalWeight, compositionData };
+  };
+
+  const getStatusColor = (status: string) => {
+    switch(status) {
+        case 'Pending': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+        case 'Assigned': return 'bg-blue-100 text-blue-700 border-blue-200';
+        case 'Completed': return 'bg-green-100 text-green-700 border-green-200';
+        case 'Missed': return 'bg-red-100 text-red-700 border-red-200';
+        default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
   // --- ACTIONS ---
 
   const toggleUserStatus = (id: string, e: React.MouseEvent) => {
@@ -419,10 +494,14 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
 
   const handleExportUsers = (data: User[]) => {
       // CSV Header
-      let csvContent = "data:text/csv;charset=utf-8,ID,Name,Role,Email,Phone,Gender,Address,Industry,Status,Balance (Z),Total Recycled (kg),ESG Score,Bank Name,Account Number,Account Name\n";
+      let csvContent = "data:text/csv;charset=utf-8,ID,Name,Role,Email,Phone,Gender,Address,Industry,Status,Balance (Z),Total Recycled (kg),Recycled Breakdown (Materials & Weights),ESG Score,Bank Name,Account Number,Account Name\n";
       
       // CSV Rows
       data.forEach(u => {
+          // Get breakdown
+          const stats = getUserStats(u);
+          const breakdown = stats.compositionData.map(c => `${c.name}: ${c.value.toFixed(2)}kg`).join('; ');
+
           const row = [
               u.id,
               `"${u.name.replace(/"/g, '""')}"`,
@@ -435,6 +514,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
               u.isActive ? 'Active' : 'Suspended',
               u.zointsBalance,
               u.totalRecycledKg || 0,
+              `"${breakdown}"`,
               u.esgScore || '',
               `"${(u.bankDetails?.bankName || '').replace(/"/g, '""')}"`,
               `"\t${u.bankDetails?.accountNumber || ''}"`, // Force text format for account numbers in Excel
@@ -477,7 +557,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       });
   };
 
-  // --- DERIVED DATA & HELPERS ---
+  // --- DERIVED DATA & HELPERS (For Report) ---
 
   // Report Generation Data
   const reportData = useMemo(() => {
@@ -530,79 +610,6 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-  };
-
-  // Check if date filtering is active
-  const isDateFilterActive = !!(dateRange.start && dateRange.end);
-
-  // Helper: Calculate metrics for a user within a specific date range (or all time if no range)
-  const getFilteredMetrics = (targetUser: User) => {
-      const start = dateRange.start ? new Date(dateRange.start) : null;
-      const end = dateRange.end ? new Date(dateRange.end) : null;
-      // Adjust end date to include the full day
-      if (end) end.setHours(23, 59, 59, 999);
-
-      // Filter global pickups
-      const userPickups = pickups.filter(p => {
-          if (!p) return false;
-          // Ownership check
-          const isOwner = targetUser.role === UserRole.COLLECTOR 
-              ? p.driver === targetUser.name 
-              : p.userId === targetUser.id;
-
-          if (!isOwner || p.status !== 'Completed') return false;
-
-          // Date Check
-          if (start && end) {
-              const taskDate = new Date(p.date);
-              return taskDate >= start && taskDate <= end;
-          }
-          return true;
-      });
-
-      const weight = userPickups.reduce((sum, p) => sum + (p.weight || 0), 0);
-      const earned = userPickups.reduce((sum, p) => sum + (p.earnedZoints || 0), 0);
-
-      return { weight, earned, count: userPickups.length };
-  };
-
-  // Helper: Get Detailed Stats for Profile View (No date filter applied usually, or re-use logic)
-  const getUserStats = (targetUser: User) => {
-      let userPickups: PickupTask[] = [];
-
-      if (targetUser.role === UserRole.COLLECTOR) {
-          userPickups = pickups.filter(p => p && p.driver === targetUser.name);
-      } else {
-          userPickups = pickups.filter(p => p && p.userId === targetUser.id);
-      }
-
-      const completed = userPickups.filter(p => p.status === 'Completed');
-      
-      const totalWeight = completed.reduce((sum, p) => sum + (p.weight || 0), 0);
-      const composition: {[key: string]: number} = {};
-      completed.forEach(p => {
-          if (p.collectionDetails) {
-              p.collectionDetails.forEach(d => {
-                  composition[d.category] = (composition[d.category] || 0) + d.weight;
-              });
-          } else {
-              const cat = p.items.split(' ')[0] || 'Other';
-              composition[cat] = (composition[cat] || 0) + (p.weight || 0);
-          }
-      });
-
-      const compositionData = Object.entries(composition).map(([name, value]) => ({ name, value }));
-      return { userPickups, completed, totalWeight, compositionData };
-  };
-
-  const getStatusColor = (status: string) => {
-    switch(status) {
-        case 'Pending': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-        case 'Assigned': return 'bg-blue-100 text-blue-700 border-blue-200';
-        case 'Completed': return 'bg-green-100 text-green-700 border-green-200';
-        case 'Missed': return 'bg-red-100 text-red-700 border-red-200';
-        default: return 'bg-gray-100 text-gray-700';
-    }
   };
 
 
