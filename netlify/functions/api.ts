@@ -192,6 +192,8 @@ export const handler = async (event: any) => {
              } catch (e) {
                  console.error("Email fail", e);
              }
+        } else if (process.env.NODE_ENV !== 'production') {
+             console.log(`[DEV] Verification OTP for ${email}: ${otp}`);
         }
         return response(200, { message: "OTP sent" });
     }
@@ -265,6 +267,8 @@ export const handler = async (event: any) => {
              } catch (e) {
                  console.error("Email fail", e);
              }
+        } else if (process.env.NODE_ENV !== 'production') {
+             console.log(`[DEV] Reset Password OTP for ${email}: ${otp}`);
         }
         
         return response(200, { message: "OTP sent" });
@@ -318,6 +322,8 @@ export const handler = async (event: any) => {
                  } catch (e) {
                      console.error("Email fail", e);
                  }
+            } else if (process.env.NODE_ENV !== 'production') {
+                 console.log(`[DEV] Change Password OTP for ${rows[0].email}: ${otp}`);
             }
 
             return response(200, { message: "OTP sent" });
@@ -461,18 +467,45 @@ export const handler = async (event: any) => {
         }
 
         const { rows } = await query(queryText, params);
-        const formattedUsers = rows.map((u: any) => ({
-            ...u,
-            zointsBalance: parseFloat(u.zoints_balance),
-            totalRecycledKg: parseFloat(u.total_recycled_kg),
-            isActive: u.is_active,
-            esgScore: u.esg_score,
-            bankDetails: {
-                bankName: u.bank_name,
-                accountNumber: u.account_number,
-                accountName: u.account_name
-            }
-        }));
+        
+        const formattedUsers = rows.map((u: any) => {
+            // Full Data for Admin, Staff, or Own Profile
+            if (isAdminOrStaff || u.id === user.userId) {
+                return {
+                    id: u.id,
+                    name: u.name,
+                    email: u.email,
+                    role: u.role,
+                    phone: u.phone,
+                    avatar: u.avatar,
+                    zointsBalance: parseFloat(u.zoints_balance),
+                    totalRecycledKg: parseFloat(u.total_recycled_kg),
+                    isActive: u.is_active,
+                    gender: u.gender,
+                    address: u.address,
+                    industry: u.industry,
+                    esgScore: u.esg_score,
+                    bankDetails: {
+                        bankName: u.bank_name,
+                        accountNumber: u.account_number,
+                        accountName: u.account_name
+                    },
+                    createdAt: u.created_at
+                };
+            } 
+            
+            // Restricted Data for Others (Public Profile)
+            return {
+                id: u.id,
+                name: u.name,
+                role: u.role,
+                avatar: u.avatar,
+                isActive: u.is_active,
+                industry: u.industry,
+                esgScore: u.esg_score
+            };
+        });
+        
         return response(200, formattedUsers);
       }
       
