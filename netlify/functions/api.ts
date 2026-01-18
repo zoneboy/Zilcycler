@@ -205,7 +205,93 @@ export const handler = async (event: any) => {
         return response(201, { message: "Account created successfully" });
     }
 
-    // --- PASSWORD RESET ---
+    // --- CHANGE PASSWORD (AUTHENTICATED) ---
+    if (cleanPath === 'auth/change-password/initiate' && method === 'POST') {
+        const { userId, currentPassword } = body;
+
+        // 1. Verify Current Password
+        const { rows } = await query('SELECT email, password_hash, name FROM users WHERE id = $1', [userId]);
+        if (rows.length === 0) return response(404, { error: "User not found" });
+        
+        const user = rows[0];
+        
+        if (!user.password_hash) {
+             return response(400, { error: "Please use 'Forgot Password' to set a password first." });
+        }
+
+        const isValid = verifyPassword(currentPassword, user.password_hash);
+        if (!isValid) {
+            return response(401, { error: "Incorrect current password" });
+        }
+
+        // 2. Generate OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+        await query(
+            'INSERT INTO password_resets (email, otp, expires_at) VALUES ($1, $2, $3) ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3',
+            [user.email, otp, expiresAt]
+        );
+
+        // 3. Send Email
+        const isSmtpConfigured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
+        if (isSmtpConfigured) {
+            try {
+                await transporter.sendMail({
+                    from: process.env.SMTP_FROM || '"Zilcycler Security" <noreply@zilcycler.com>',
+                    to: user.email,
+                    subject: 'Verify Password Change',
+                    html: `
+                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+                            <h2 style="color: #166534; text-align: center;">Verify Password Change</h2>
+                            <p>Hello ${user.name},</p>
+                            <p>We received a request to change your password. Use the code below to confirm this action.</p>
+                            <div style="text-align: center; margin: 30px 0;">
+                                <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #166534; background: #f0fdf4; padding: 10px 20px; border-radius: 5px;">${otp}</span>
+                            </div>
+                            <p>This code expires in 10 minutes.</p>
+                        </div>
+                    `,
+                    text: `Your password change verification code is: ${otp}`
+                });
+            } catch (emailError: any) {
+                console.error("Failed to send OTP email:", emailError);
+                return response(500, { error: "Failed to send verification email." });
+            }
+        } else {
+             console.log("================================================================");
+             console.log(`[SIMULATION] Change Password OTP for ${user.email}: ${otp}`);
+             console.log("================================================================");
+        }
+        
+        return response(200, { message: "OTP sent" });
+    }
+
+    if (cleanPath === 'auth/change-password/confirm' && method === 'POST') {
+        const { userId, otp, newPassword } = body;
+        
+        // 1. Get Email from userId
+        const userRes = await query('SELECT email FROM users WHERE id = $1', [userId]);
+        if (userRes.rows.length === 0) return response(404, { error: "User not found" });
+        const email = userRes.rows[0].email;
+
+        // 2. Verify OTP
+        const { rows } = await query('SELECT * FROM password_resets WHERE email = $1', [email]);
+        if (rows.length === 0) return response(400, { error: "Invalid request or expired OTP" });
+        
+        const resetRecord = rows[0];
+        if (resetRecord.otp !== otp) return response(400, { error: "Invalid OTP code" });
+        if (new Date(resetRecord.expires_at) < new Date()) return response(400, { error: "OTP has expired" });
+
+        // 3. Update Password
+        const passwordHash = hashPassword(newPassword);
+        await query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
+        await query('DELETE FROM password_resets WHERE email = $1', [email]);
+
+        return response(200, { success: true });
+    }
+
+    // --- PASSWORD RESET (FORGOT PASSWORD) ---
     if (cleanPath === 'auth/forgot-password' && method === 'POST') {
         const { email } = body;
         
@@ -258,7 +344,7 @@ export const handler = async (event: any) => {
             }
         } else {
             console.log("================================================================");
-            console.log(`[SIMULATION] SMTP Variables missing. OTP for ${email}: ${otp}`);
+            console.log(`[SIMULATION] Forgot Password OTP for ${email}: ${otp}`);
             console.log("================================================================");
             return response(200, { 
                 message: "OTP generated (Simulation Mode)", 

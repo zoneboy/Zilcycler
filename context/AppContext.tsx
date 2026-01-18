@@ -20,6 +20,8 @@ interface AppContextType {
   login: (email: string, password: string) => Promise<User>;
   requestPasswordReset: (email: string) => Promise<void>;
   resetPassword: (email: string, otp: string, newPassword: string) => Promise<void>;
+  initiateChangePassword: (userId: string, currentPassword: string) => Promise<void>;
+  confirmChangePassword: (userId: string, otp: string, newPassword: string) => Promise<void>;
   addUser: (user: User, password?: string) => Promise<void>;
   registerUser: (user: User, password: string, otp: string) => Promise<void>;
   sendSignupVerification: (email: string) => Promise<void>;
@@ -139,6 +141,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!response.ok) {
           const err = await response.json();
           throw new Error(err.error || 'Reset failed');
+      }
+  };
+
+  const initiateChangePassword = async (userId: string, currentPassword: string): Promise<void> => {
+      const response = await fetch('/api/auth/change-password/initiate', {
+          method: 'POST',
+          body: JSON.stringify({ userId, currentPassword })
+      });
+      if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Password verification failed');
+      }
+  };
+
+  const confirmChangePassword = async (userId: string, otp: string, newPassword: string): Promise<void> => {
+      const response = await fetch('/api/auth/change-password/confirm', {
+          method: 'POST',
+          body: JSON.stringify({ userId, otp, newPassword })
+      });
+      if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Failed to update password');
       }
   };
 
@@ -331,7 +355,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }
 
   return (
-    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, certificates, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, registerUser, sendSignupVerification, login, requestPasswordReset, resetPassword, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost, addCertificate }}>
+    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, certificates, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, registerUser, sendSignupVerification, login, requestPasswordReset, resetPassword, initiateChangePassword, confirmChangePassword, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost, addCertificate }}>
       {children}
     </AppContext.Provider>
   );

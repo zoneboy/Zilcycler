@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
 import { useApp } from '../context/AppContext';
-import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, AlertCircle, ArrowLeft, Save, Lock, Eye, EyeOff, Check, Globe, Trash2, AlertTriangle, Landmark, Camera } from 'lucide-react';
+import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, AlertCircle, ArrowLeft, Save, Lock, Eye, EyeOff, Check, Globe, Trash2, AlertTriangle, Landmark, Camera, KeyRound } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -11,7 +11,7 @@ interface Props {
 type SettingsView = 'MAIN' | 'ACCOUNT' | 'PRIVACY';
 
 const Settings: React.FC<Props> = ({ user, onLogout }) => {
-  const { updateUser } = useApp();
+  const { updateUser, initiateChangePassword, confirmChangePassword } = useApp();
   const [currentView, setCurrentView] = useState<SettingsView>('MAIN');
   const [notifications, setNotifications] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +45,9 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
   // Privacy State
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
   const [showPassword, setShowPassword] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  
   const [publicProfile, setPublicProfile] = useState(false);
   const [dataSharing, setDataSharing] = useState(true);
 
@@ -99,19 +102,56 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     }, 1500);
   };
 
-  const handleSavePassword = (e: React.FormEvent) => {
+  // Step 1: Initiate Password Change
+  const handleInitiatePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (passwords.new !== passwords.confirm) {
         alert("New passwords do not match!");
         return;
     }
+
+    // Password Strength Validation
+    // At least 8 characters, 1 letter, 1 number, 1 special char
+    const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*()_+{}\[\]:;<>,.?~\\-]).{8,}$/;
+    if (!passwordRegex.test(passwords.new)) {
+        alert("Password must be at least 8 characters long and contain a mix of letters, numbers, and symbols.");
+        return;
+    }
+
     setIsSaving(true);
-    setTimeout(() => {
+    try {
+        await initiateChangePassword(user.id, passwords.current);
+        alert("Verification code sent to your email.");
+        setIsVerifyingOtp(true); // Switch to OTP mode
         setIsSaving(false);
-        alert("Password changed successfully!");
-        setPasswords({ current: '', new: '', confirm: '' });
-        setCurrentView('MAIN');
-    }, 1500);
+    } catch (error: any) {
+        alert(error.message || "Failed to initiate password change. Check your current password.");
+        setIsSaving(false);
+    }
+  };
+
+  // Step 2: Confirm Password Change
+  const handleConfirmPasswordChange = async () => {
+      if (otp.length < 6) {
+          alert("Please enter a valid 6-digit code.");
+          return;
+      }
+      setIsSaving(true);
+      try {
+          await confirmChangePassword(user.id, otp, passwords.new);
+          alert("Password changed successfully!");
+          
+          // Reset Form
+          setPasswords({ current: '', new: '', confirm: '' });
+          setOtp('');
+          setIsVerifyingOtp(false);
+          setCurrentView('MAIN');
+      } catch (error: any) {
+          alert(error.message || "Failed to change password. Invalid code.");
+      } finally {
+          setIsSaving(false);
+      }
   };
 
   const renderMain = () => (
@@ -374,52 +414,95 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
         </div>
 
         {/* Change Password */}
-        <form onSubmit={handleSavePassword} className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4 transition-colors">
+        <form onSubmit={handleInitiatePasswordChange} className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4 transition-colors">
             <h3 className="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
                 <Lock className="w-4 h-4 text-green-600" /> Change Password
             </h3>
             
-            <div className="space-y-3">
-                 <div className="relative">
-                    <input 
-                        type={showPassword ? "text" : "password"} 
-                        placeholder="Current Password"
-                        value={passwords.current}
-                        onChange={(e) => setPasswords({...passwords, current: e.target.value})}
-                        className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-green-500 dark:text-white text-sm transition-colors"
-                    />
-                 </div>
-                 <div className="relative">
-                    <input 
-                        type={showPassword ? "text" : "password"} 
-                        placeholder="New Password"
-                        value={passwords.new}
-                        onChange={(e) => setPasswords({...passwords, new: e.target.value})}
-                        className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-green-500 dark:text-white text-sm transition-colors"
-                    />
-                 </div>
-                 <div className="relative">
-                    <input 
-                        type={showPassword ? "text" : "password"} 
-                        placeholder="Confirm New Password"
-                        value={passwords.confirm}
-                        onChange={(e) => setPasswords({...passwords, confirm: e.target.value})}
-                        className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-green-500 dark:text-white text-sm transition-colors"
-                    />
-                 </div>
-                 
-                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-xs text-gray-500 dark:text-gray-400 font-medium flex items-center gap-1 hover:text-green-600 dark:hover:text-green-400">
-                     {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />} {showPassword ? 'Hide' : 'Show'} Passwords
-                 </button>
-            </div>
+            {/* If verifying OTP, show OTP input instead of password fields */}
+            {isVerifyingOtp ? (
+                <div className="space-y-3 animate-fade-in">
+                    <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300 text-sm rounded-xl border border-green-100 dark:border-green-900/50 mb-2">
+                        Verification code sent to <b>{user.email}</b>.
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Enter Verification Code</label>
+                        <input 
+                            type="text" 
+                            value={otp}
+                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            className="w-full p-3 mt-1 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-green-500 dark:text-white text-center text-lg font-bold tracking-widest transition-colors"
+                            placeholder="000000"
+                            autoFocus
+                        />
+                    </div>
+                    <button 
+                        type="button" 
+                        onClick={handleConfirmPasswordChange}
+                        disabled={isSaving}
+                        className="w-full bg-green-700 text-white py-3 rounded-xl font-bold shadow-md hover:bg-green-800 transition-all flex items-center justify-center gap-2 mt-4"
+                    >
+                        {isSaving ? 'Verifying...' : 'Verify & Update Password'}
+                    </button>
+                    <button 
+                        type="button" 
+                        onClick={() => { setIsVerifyingOtp(false); setOtp(''); }}
+                        className="w-full text-gray-500 dark:text-gray-400 text-sm font-bold hover:underline"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            ) : (
+                <>
+                    <div className="space-y-3">
+                        <div className="relative">
+                            <input 
+                                type={showPassword ? "text" : "password"} 
+                                placeholder="Current Password"
+                                value={passwords.current}
+                                onChange={(e) => setPasswords({...passwords, current: e.target.value})}
+                                className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-green-500 dark:text-white text-sm transition-colors"
+                                required
+                            />
+                        </div>
+                        <div className="relative">
+                            <input 
+                                type={showPassword ? "text" : "password"} 
+                                placeholder="New Password"
+                                value={passwords.new}
+                                onChange={(e) => setPasswords({...passwords, new: e.target.value})}
+                                className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-green-500 dark:text-white text-sm transition-colors"
+                                required
+                            />
+                        </div>
+                        <div className="relative">
+                            <input 
+                                type={showPassword ? "text" : "password"} 
+                                placeholder="Confirm New Password"
+                                value={passwords.confirm}
+                                onChange={(e) => setPasswords({...passwords, confirm: e.target.value})}
+                                className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-green-500 dark:text-white text-sm transition-colors"
+                                required
+                            />
+                        </div>
+                        
+                        <div className="flex justify-between items-center text-xs">
+                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-gray-500 dark:text-gray-400 font-medium flex items-center gap-1 hover:text-green-600 dark:hover:text-green-400">
+                                {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />} {showPassword ? 'Hide' : 'Show'}
+                            </button>
+                            <span className="text-gray-400">Min 8 chars, 1 number, 1 symbol</span>
+                        </div>
+                    </div>
 
-            <button 
-                type="submit" 
-                disabled={isSaving || !passwords.current || !passwords.new}
-                className="w-full bg-gray-900 dark:bg-black text-white py-3 rounded-xl font-bold text-sm hover:bg-black dark:hover:bg-gray-900 transition-all disabled:opacity-50 border border-transparent dark:border-gray-700"
-            >
-                {isSaving ? 'Updating...' : 'Update Password'}
-            </button>
+                    <button 
+                        type="submit" 
+                        disabled={isSaving || !passwords.current || !passwords.new}
+                        className="w-full bg-gray-900 dark:bg-black text-white py-3 rounded-xl font-bold text-sm hover:bg-black dark:hover:bg-gray-900 transition-all disabled:opacity-50 border border-transparent dark:border-gray-700"
+                    >
+                        {isSaving ? 'Checking...' : 'Update Password'}
+                    </button>
+                </>
+            )}
         </form>
 
         {/* Privacy Toggles */}
