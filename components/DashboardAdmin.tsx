@@ -286,7 +286,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       const weight = userPickups.reduce((sum, p) => sum + (p.weight || 0), 0);
       const earned = userPickups.reduce((sum, p) => sum + (p.earnedZoints || 0), 0);
 
-      return { weight, earned, count: userPickups.length };
+      return { weight, earned, count: userPickups.length, pickups: userPickups };
   };
 
   // Helper: Get Detailed Stats for Profile View (No date filter applied usually, or re-use logic)
@@ -494,13 +494,33 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
 
   const handleExportUsers = (data: User[]) => {
       // CSV Header
-      let csvContent = "data:text/csv;charset=utf-8,ID,Name,Role,Email,Phone,Gender,Address,Industry,Status,Balance (Z),Total Recycled (kg),Recycled Breakdown (Materials & Weights),ESG Score,Bank Name,Account Number,Account Name\n";
+      let csvContent = "data:text/csv;charset=utf-8,ID,Name,Role,Email,Phone,Gender,Address,Industry,Status,Balance/Earned (Z),Recycled Weight (kg),Recycled Breakdown (Materials & Weights),ESG Score,Bank Name,Account Number,Account Name\n";
       
       // CSV Rows
       data.forEach(u => {
-          // Get breakdown
-          const stats = getUserStats(u);
-          const breakdown = stats.compositionData.map(c => `${c.name}: ${c.value.toFixed(2)}kg`).join('; ');
+          const metrics = getFilteredMetrics(u);
+          
+          // Determine values based on filter state
+          const displayBalance = isDateFilterActive ? metrics.earned : u.zointsBalance;
+          const displayWeight = isDateFilterActive 
+              ? metrics.weight 
+              : (u.totalRecycledKg || 0) + metrics.weight;
+
+          // Calculate breakdown for the specific set of pickups in metrics
+          const composition: {[key: string]: number} = {};
+          metrics.pickups.forEach(p => {
+              if (p.collectionDetails) {
+                  p.collectionDetails.forEach(d => {
+                      composition[d.category] = (composition[d.category] || 0) + d.weight;
+                  });
+              } else {
+                  const cat = p.items.split(' ')[0] || 'Other';
+                  composition[cat] = (composition[cat] || 0) + (p.weight || 0);
+              }
+          });
+          const breakdown = Object.entries(composition)
+              .map(([k, v]) => `${k}: ${v.toFixed(2)}kg`)
+              .join('; ');
 
           const row = [
               u.id,
@@ -512,8 +532,8 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
               `"${(u.address || '').replace(/"/g, '""')}"`,
               u.industry || '',
               u.isActive ? 'Active' : 'Suspended',
-              u.zointsBalance,
-              u.totalRecycledKg || 0,
+              displayBalance,
+              displayWeight,
               `"${breakdown}"`,
               u.esgScore || '',
               `"${(u.bankDetails?.bankName || '').replace(/"/g, '""')}"`,
@@ -524,10 +544,14 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       });
 
       // Download
+      const fileName = isDateFilterActive 
+        ? `users_report_${dateRange.start}_to_${dateRange.end}.csv`
+        : `users_export_${new Date().toISOString().split('T')[0]}.csv`;
+
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `users_export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute("download", fileName);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
