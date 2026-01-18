@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, UserRole, WasteRates, PickupTask, RedemptionRequest, BlogPost, Certificate } from '../types';
 import { useApp } from '../context/AppContext';
-import { Cell, PieChart, Pie, Legend, ResponsiveContainer, Tooltip } from 'recharts';
-import { Users, Settings, LogOut, ArrowLeft, Ban, CheckCircle, ShieldAlert, Save, Coins, Search, Mail, Phone, ChevronRight, Truck, Calendar, ArrowDownUp, X, Filter, MapPin, Package, User as UserIcon, AlertTriangle, ImageIcon, Download, Loader2, Scale, FileText, Banknote, Lock, Landmark, UserPlus, BookOpen, Trash2, Plus, Image as ImageIcon2, Shield, FileBadge, Upload, Leaf, BarChart3 } from 'lucide-react';
+import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
+import { Users, Settings, LogOut, ArrowLeft, Ban, CheckCircle, ShieldAlert, Save, Coins, Search, Mail, Phone, ChevronRight, Truck, Calendar, ArrowDownUp, X, Filter, MapPin, Package, User as UserIcon, AlertTriangle, ImageIcon, Download, Loader2, Scale, FileText, Banknote, Lock, Landmark, UserPlus, BookOpen, Trash2, Plus, Image as ImageIcon2, Shield, FileBadge, Upload, Leaf } from 'lucide-react';
 
 interface Props {
   user: User;
   onLogout: () => void;
 }
 
-type AdminView = 'DASHBOARD' | 'USERS' | 'SETTINGS' | 'PICKUPS' | 'DAILY_STATS' | 'REQUESTS' | 'TIPS' | 'CERTIFICATES' | 'RECYCLING_VOLUME';
+type AdminView = 'DASHBOARD' | 'USERS' | 'SETTINGS' | 'PICKUPS' | 'DAILY_STATS' | 'REQUESTS' | 'TIPS' | 'CERTIFICATES';
 type SortOption = 'NAME' | 'WEIGHT_DESC' | 'WEIGHT_ASC';
 
 const COLORS = ['#16a34a', '#2563eb', '#ca8a04', '#dc2626', '#9333ea', '#0891b2'];
@@ -38,17 +38,6 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
 
   // Daily Stats State
   const [selectedDayStats, setSelectedDayStats] = useState<{ date: string; weight: number; count: number; items: PickupTask[] } | null>(null);
-
-  // Recycling Volume State
-  const [volumeDateRange, setVolumeDateRange] = useState(() => {
-      const end = new Date();
-      const start = new Date();
-      start.setDate(start.getDate() - 30);
-      return {
-          start: start.toISOString().split('T')[0],
-          end: end.toISOString().split('T')[0]
-      };
-  });
 
   // Redemption Requests State
   const [selectedRedemption, setSelectedRedemption] = useState<RedemptionRequest | null>(null);
@@ -289,6 +278,30 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       document.body.removeChild(link);
   };
 
+  const handleDateSelect = (dateString: string) => {
+      if (!dateString) return;
+      
+      // Create date object from input (YYYY-MM-DD), force local midnight to match how pickup dates (May 12, 2024) are usually parsed
+      const targetDate = new Date(dateString + 'T00:00:00');
+      const targetDateString = targetDate.toDateString();
+
+      const items = pickups.filter(p => {
+          if (!p) return false;
+          if (p.status !== 'Completed') return false;
+          const pDate = new Date(p.date);
+          return pDate.toDateString() === targetDateString;
+      });
+      
+      const weight = items.reduce((sum, p) => sum + (p.weight || 0), 0);
+      
+      setSelectedDayStats({
+          date: targetDate.toISOString(), 
+          weight,
+          count: items.length,
+          items
+      });
+  };
+
   // --- DERIVED DATA & HELPERS ---
 
   // Report Generation Data
@@ -343,6 +356,53 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       link.click();
       document.body.removeChild(link);
   };
+
+  // Dynamic Weekly Stats Calculation
+  const weeklyStats = useMemo(() => {
+    // 1. Group completed pickups by date
+    const groupedData: { [date: string]: { weight: number; count: number; items: PickupTask[] } } = {};
+
+    pickups.forEach(p => {
+        if (p && p.status === 'Completed' && p.weight) {
+            // Normalize date string if needed, assuming YYYY-MM-DD or readable string
+            const dateKey = p.date; 
+            if (!groupedData[dateKey]) {
+                groupedData[dateKey] = { weight: 0, count: 0, items: [] };
+            }
+            groupedData[dateKey].weight += p.weight;
+            groupedData[dateKey].count += 1;
+            groupedData[dateKey].items.push(p);
+        }
+    });
+
+    // 2. Convert to array and sort by date
+    const sortedStats = Object.entries(groupedData)
+        .map(([date, data]) => ({
+            name: new Date(date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }), // e.g., "Mon 12"
+            fullDate: date,
+            value: data.weight,
+            count: data.count,
+            items: data.items
+        }))
+        .sort((a, b) => new Date(a.fullDate).getTime() - new Date(b.fullDate).getTime());
+
+    // 3. Take only the last 7 entries if there are many
+    return sortedStats.slice(-7);
+  }, [pickups]);
+
+  // Simplified handler attached directly to Bar component
+  const handleBarClick = (data: any) => {
+    if (data) {
+        setSelectedDayStats({
+            date: data.fullDate,
+            weight: data.value,
+            count: data.count,
+            items: data.items
+        });
+        setCurrentView('DAILY_STATS');
+    }
+  };
+
 
   // Check if date filtering is active
   const isDateFilterActive = !!(dateRange.start && dateRange.end);
@@ -463,24 +523,23 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                  </div>
              </div>
 
-             {/* Recycling Volume Analytics Button */}
-             <button 
-                onClick={() => setCurrentView('RECYCLING_VOLUME')}
-                className="w-full bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between group hover:border-green-300 transition-all text-left"
-             >
-                 <div className="flex items-center gap-4">
-                     <div className="w-14 h-14 bg-green-50 text-green-600 rounded-full flex items-center justify-center border border-green-100">
-                         <BarChart3 className="w-7 h-7" />
-                     </div>
-                     <div>
-                         <h3 className="text-lg font-bold text-gray-800 group-hover:text-green-700 transition-colors">Recycling Volume</h3>
-                         <p className="text-sm text-gray-500">Daily breakdown, date filters & CSV export</p>
-                     </div>
+             {/* Chart Section */}
+             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                 <h3 className="font-bold text-gray-800 mb-4">Weekly Recycling Volume</h3>
+                 <div className="h-64">
+                     <ResponsiveContainer width="100%" height="100%">
+                         <BarChart data={weeklyStats} onClick={handleBarClick}>
+                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#9ca3af'}} />
+                             <Tooltip 
+                                 cursor={{fill: '#f3f4f6'}} 
+                                 contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} 
+                             />
+                             <Bar dataKey="value" fill="#16a34a" radius={[4, 4, 0, 0]} barSize={40} />
+                         </BarChart>
+                     </ResponsiveContainer>
                  </div>
-                 <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-all">
-                    <ChevronRight className="w-5 h-5" />
-                 </div>
-             </button>
+                 <p className="text-center text-xs text-gray-400 mt-2">Tap a bar to view daily details</p>
+             </div>
 
              {/* Reports Section */}
              <div className="bg-gray-900 text-white p-5 rounded-2xl shadow-lg">
@@ -1096,148 +1155,13 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
     );
   };
 
-  const renderRecyclingVolume = () => {
-    // Logic to calculate daily volumes
-    const start = new Date(volumeDateRange.start);
-    const end = new Date(volumeDateRange.end);
-    end.setHours(23, 59, 59, 999);
-
-    const filtered = pickups.filter(p => {
-        if (p.status !== 'Completed') return false;
-        const d = new Date(p.date);
-        return d >= start && d <= end;
-    });
-
-    const grouped: Record<string, { weight: number, count: number, items: PickupTask[] }> = {};
-    filtered.forEach(p => {
-        const dateKey = p.date; // Assuming normalized YYYY-MM-DD
-        if (!grouped[dateKey]) grouped[dateKey] = { weight: 0, count: 0, items: [] };
-        grouped[dateKey].weight += (p.weight || 0);
-        grouped[dateKey].count += 1;
-        grouped[dateKey].items.push(p);
-    });
-
-    const dailyData = Object.entries(grouped)
-        .map(([date, data]) => ({ date, ...data }))
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-    const totalWeightInRange = dailyData.reduce((acc, curr) => acc + curr.weight, 0);
-
-    const handleExportDailyVolume = () => {
-        let csvContent = "data:text/csv;charset=utf-8,Date,Total Weight (kg),Pickup Count\n";
-        dailyData.forEach(row => {
-            csvContent += `${row.date},${row.weight},${row.count}\n`;
-        });
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `recycling_volume_${volumeDateRange.start}_to_${volumeDateRange.end}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
-    const handleDayClick = (item: typeof dailyData[0]) => {
-        setSelectedDayStats({
-            date: new Date(item.date).toISOString(),
-            weight: item.weight,
-            count: item.count,
-            items: item.items
-        });
-        setCurrentView('DAILY_STATS');
-    };
-
-    return (
-        <div className="space-y-6 animate-fade-in h-full flex flex-col">
-            <div className="flex items-center gap-2 mb-2">
-                <button onClick={() => setCurrentView('DASHBOARD')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                    <ArrowLeft className="w-6 h-6 text-gray-600" />
-                </button>
-                <h2 className="text-lg font-bold text-gray-900">Recycling Volume</h2>
-            </div>
-
-            {/* Filters */}
-            <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-wrap items-center gap-4">
-                 <div className="flex items-center gap-2">
-                     <span className="text-sm font-bold text-gray-500">From:</span>
-                     <input 
-                        type="date" 
-                        value={volumeDateRange.start} 
-                        onChange={(e) => setVolumeDateRange({...volumeDateRange, start: e.target.value})}
-                        className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500"
-                     />
-                 </div>
-                 <div className="flex items-center gap-2">
-                     <span className="text-sm font-bold text-gray-500">To:</span>
-                     <input 
-                        type="date" 
-                        value={volumeDateRange.end} 
-                        onChange={(e) => setVolumeDateRange({...volumeDateRange, end: e.target.value})}
-                        className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500"
-                     />
-                 </div>
-                 <div className="flex-1 text-right">
-                     <button 
-                        onClick={handleExportDailyVolume}
-                        className="bg-green-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-green-700 transition-colors flex items-center gap-2 ml-auto"
-                     >
-                         <Download className="w-4 h-4" /> Export CSV
-                     </button>
-                 </div>
-            </div>
-
-            {/* Summary */}
-            <div className="grid grid-cols-2 gap-4">
-                <div className="bg-green-50 p-4 rounded-2xl border border-green-100">
-                    <span className="text-3xl font-bold text-green-700">{totalWeightInRange.toLocaleString()}</span>
-                    <span className="block text-xs font-bold text-green-600 uppercase">Total Kg (Selected Period)</span>
-                </div>
-                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-                    <span className="text-3xl font-bold text-blue-700">{dailyData.length}</span>
-                    <span className="block text-xs font-bold text-blue-600 uppercase">Active Days</span>
-                </div>
-            </div>
-
-            {/* List */}
-            <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
-                <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between text-xs font-bold text-gray-500 uppercase">
-                    <span>Date</span>
-                    <div className="flex gap-8">
-                        <span className="w-20 text-right">Pickups</span>
-                        <span className="w-24 text-right">Volume (kg)</span>
-                    </div>
-                </div>
-                <div className="flex-1 overflow-y-auto">
-                    {dailyData.length === 0 ? (
-                        <div className="flex items-center justify-center h-40 text-gray-400 text-sm">No data in this range</div>
-                    ) : (
-                        dailyData.map((item) => (
-                            <div 
-                                key={item.date} 
-                                onClick={() => handleDayClick(item)}
-                                className="p-4 border-b border-gray-50 flex justify-between items-center hover:bg-gray-50 transition-colors cursor-pointer group"
-                            >
-                                <span className="font-bold text-gray-800 text-sm group-hover:text-green-700 transition-colors">{new Date(item.date).toDateString()}</span>
-                                <div className="flex gap-8 text-sm">
-                                    <span className="w-20 text-right text-gray-600">{item.count}</span>
-                                    <span className="w-24 text-right font-bold text-green-700">{item.weight.toFixed(1)}</span>
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-  };
-
   const renderDailyStats = () => {
     if (!selectedDayStats) return null;
 
     return (
         <div className="space-y-6 animate-fade-in h-full flex flex-col">
             <div className="flex items-center gap-2 mb-2">
-                <button onClick={() => setCurrentView('RECYCLING_VOLUME')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                <button onClick={() => setCurrentView('DASHBOARD')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                     <ArrowLeft className="w-6 h-6 text-gray-600" />
                 </button>
                 <div>
@@ -1422,6 +1346,101 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       </div>
   );
 
+  const renderSettings = () => (
+      <div className="space-y-6 animate-fade-in">
+           <div className="flex items-center gap-2 mb-2">
+                <button onClick={() => setCurrentView('DASHBOARD')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                    <ArrowLeft className="w-6 h-6 text-gray-600" />
+                </button>
+                <h2 className="text-lg font-bold text-gray-900">Platform Settings</h2>
+           </div>
+
+           {/* System Controls */}
+           <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                    <ShieldAlert className="w-5 h-5 text-gray-500" /> System Controls
+                </h3>
+                
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
+                    <div>
+                        <span className="font-bold text-gray-800 block text-sm">Maintenance Mode</span>
+                        <span className="text-xs text-gray-500">Disable login for non-admin users</span>
+                    </div>
+                    <button 
+                        onClick={() => updateSysConfig({...sysConfig, maintenanceMode: !sysConfig.maintenanceMode})}
+                        className={`w-12 h-6 rounded-full transition-colors relative ${sysConfig.maintenanceMode ? 'bg-red-500' : 'bg-gray-300'}`}
+                    >
+                        <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${sysConfig.maintenanceMode ? 'left-6.5 translate-x-1' : 'left-0.5'}`}></div>
+                    </button>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
+                    <div>
+                        <span className="font-bold text-gray-800 block text-sm">Allow Registrations</span>
+                        <span className="text-xs text-gray-500">Open/Close new user signups</span>
+                    </div>
+                    <button 
+                        onClick={() => updateSysConfig({...sysConfig, allowRegistrations: !sysConfig.allowRegistrations})}
+                        className={`w-12 h-6 rounded-full transition-colors relative ${sysConfig.allowRegistrations ? 'bg-green-600' : 'bg-gray-300'}`}
+                    >
+                        <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${sysConfig.allowRegistrations ? 'left-6.5 translate-x-1' : 'left-0.5'}`}></div>
+                    </button>
+                </div>
+           </div>
+
+           {/* Waste Rates & CO2 */}
+           <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                        <Coins className="w-5 h-5 text-yellow-500" /> Rates & Sustainability
+                    </h3>
+                    {showSaveConfirmation && (
+                        <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-lg animate-fade-in">Saved!</span>
+                    )}
+                </div>
+                <p className="text-xs text-gray-500">Set the Zoint value and CO₂ saving factor per kg for each waste category.</p>
+
+                <div className="space-y-4">
+                    {Object.keys(editedRates).map((cat) => (
+                        <div key={cat} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-gray-50 p-3 rounded-xl border border-gray-200">
+                            <span className="text-sm font-bold text-gray-600 w-24">{cat}</span>
+                            <div className="flex items-center gap-2 flex-1 w-full">
+                                <div className="relative flex-1">
+                                    <input 
+                                        type="number" 
+                                        value={editedRates[cat].rate} 
+                                        onChange={(e) => handleRateChange(cat, 'rate', e.target.value)}
+                                        className="w-full bg-white border border-gray-300 rounded-lg pl-2 pr-10 py-1 text-sm font-bold text-gray-900 focus:outline-none focus:border-green-500"
+                                    />
+                                    <span className="absolute right-2 top-1 text-[10px] text-gray-400 font-bold mt-0.5">Z/kg</span>
+                                </div>
+                                <div className="relative flex-1">
+                                    <input 
+                                        type="number" 
+                                        step="0.01"
+                                        value={editedRates[cat].co2} 
+                                        onChange={(e) => handleRateChange(cat, 'co2', e.target.value)}
+                                        className="w-full bg-white border border-gray-300 rounded-lg pl-2 pr-14 py-1 text-sm font-bold text-gray-900 focus:outline-none focus:border-green-500"
+                                    />
+                                    <span className="absolute right-2 top-1 text-[10px] text-gray-400 font-bold mt-0.5 flex items-center gap-0.5">
+                                        <Leaf className="w-2 h-2" /> CO₂
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <button 
+                    onClick={saveRates}
+                    className="w-full bg-green-700 text-white py-3 rounded-xl font-bold shadow-md hover:bg-green-800 transition-colors flex items-center justify-center gap-2"
+                >
+                    <Save className="w-4 h-4" /> Save Configuration
+                </button>
+           </div>
+      </div>
+  );
+
   return (
     <div className="space-y-6 pb-24 h-full flex flex-col">
        {/* Header */}
@@ -1446,7 +1465,6 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
           {currentView === 'SETTINGS' && renderSettings()}
           {currentView === 'PICKUPS' && renderPickupsManagement()}
           {currentView === 'DAILY_STATS' && renderDailyStats()}
-          {currentView === 'RECYCLING_VOLUME' && renderRecyclingVolume()}
           {currentView === 'TIPS' && renderContentManagement()}
           {currentView === 'CERTIFICATES' && renderCertificatesManagement()}
       </div>
