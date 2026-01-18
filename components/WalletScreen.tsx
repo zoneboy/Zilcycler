@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { useApp } from '../context/AppContext'; // Import Context
 import WalletCard from './WalletCard';
-import { ArrowDownLeft, ArrowUpRight, History, ChevronUp, ChevronDown, Loader2, Search, X, Hash, Clock, CheckCircle, Download, TrendingUp } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, History, ChevronUp, ChevronDown, Loader2, Search, X, Hash, Clock, CheckCircle, Download, TrendingUp, AlertCircle } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -281,6 +281,47 @@ const WalletScreen: React.FC<Props> = ({ user }) => {
           )}
       </div>
 
+      {/* Market Rates Modal */}
+      {showRates && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowRates(false)}></div>
+              <div className="bg-white dark:bg-gray-800 rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up p-6">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                          <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-500" /> Current Rates
+                      </h3>
+                      <button onClick={() => setShowRates(false)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                          <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                      </button>
+                  </div>
+                  
+                  <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                      {Object.keys(wasteRates).length === 0 ? (
+                           <p className="text-center text-gray-500 py-4">Rates not configured.</p>
+                      ) : (
+                          Object.entries(wasteRates).map(([category, details]) => (
+                              <div key={category} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600">
+                                  <span className="font-bold text-gray-700 dark:text-gray-200">{category}</span>
+                                  <span className="font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-3 py-1 rounded-lg text-sm">
+                                      {details.rate} Z / kg
+                                  </span>
+                              </div>
+                          ))
+                      )}
+                  </div>
+
+                  <div className="mt-6 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex gap-3 items-start border border-blue-100 dark:border-blue-900/30">
+                        <div className="p-1 bg-blue-100 dark:bg-blue-900/50 rounded-full text-blue-600 dark:text-blue-400 mt-0.5 shrink-0">
+                            <AlertCircle className="w-3 h-3" />
+                        </div>
+                        <p className="text-xs text-blue-800 dark:text-blue-300">
+                            Rates are set globally by Zilcycler admins and are subject to change based on market demand.
+                        </p>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* Transaction Detail Modal */}
       {selectedTransaction && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -288,27 +329,39 @@ const WalletScreen: React.FC<Props> = ({ user }) => {
               <div className="bg-white dark:bg-gray-800 rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up p-6">
                   <div className="flex justify-between items-center mb-6">
                       <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                          <TrendingUp className="w-5 h-5 text-green-600" /> Current Rates
+                          <History className="w-5 h-5 text-gray-400" /> Transaction Details
                       </h3>
-                      <button onClick={() => setShowRates(false)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                      <button onClick={() => setSelectedTransaction(null)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
                           <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
                       </button>
                   </div>
-                  
-                  <div className="space-y-3">
-                      {Object.entries(wasteRates).map(([category, details]) => (
-                          <div key={category} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600">
-                              <span className="font-bold text-gray-700 dark:text-gray-200">{category}</span>
-                              <span className="font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-3 py-1 rounded-lg text-sm">
-                                  {details.rate} Z / kg
-                              </span>
-                          </div>
-                      ))}
-                  </div>
 
-                  <p className="text-center text-xs text-gray-400 mt-6">
-                      Rates are set globally by Zilcycler and subject to change.
-                  </p>
+                  <div className="space-y-4">
+                      <div className="flex flex-col items-center justify-center py-4">
+                          <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-3 ${selectedTransaction.type === 'EARNED' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400'}`}>
+                                {selectedTransaction.type === 'EARNED' ? <ArrowDownLeft className="w-8 h-8" /> : <ArrowUpRight className="w-8 h-8" />}
+                          </div>
+                          <h2 className={`text-3xl font-bold ${selectedTransaction.type === 'EARNED' ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}>
+                             {selectedTransaction.type === 'EARNED' ? '+' : '-'}{selectedTransaction.amount} Z
+                          </h2>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{selectedTransaction.type === 'EARNED' ? 'Received' : 'Sent'}</p>
+                      </div>
+
+                      <div className="bg-gray-50 dark:bg-gray-700/30 rounded-2xl p-4 space-y-3 border border-gray-100 dark:border-gray-700">
+                          <div className="flex justify-between">
+                              <span className="text-xs text-gray-400 font-bold uppercase">Transaction ID</span>
+                              <span className="text-sm font-mono font-bold text-gray-800 dark:text-gray-200">{selectedTransaction.id}</span>
+                          </div>
+                          <div className="flex justify-between">
+                              <span className="text-xs text-gray-400 font-bold uppercase">Date</span>
+                              <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{selectedTransaction.date} • {selectedTransaction.timestamp}</span>
+                          </div>
+                          <div className="flex justify-between">
+                              <span className="text-xs text-gray-400 font-bold uppercase">Description</span>
+                              <span className="text-sm font-bold text-gray-800 dark:text-gray-200 text-right max-w-[200px]">{selectedTransaction.description}</span>
+                          </div>
+                      </div>
+                  </div>
               </div>
           </div>
       )}
