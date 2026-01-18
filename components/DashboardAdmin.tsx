@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, UserRole, WasteRates, PickupTask, RedemptionRequest, BlogPost, Certificate } from '../types';
 import { useApp } from '../context/AppContext';
 import { Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
-import { Users, Settings, LogOut, ArrowLeft, Ban, CheckCircle, ShieldAlert, Save, Coins, Search, Mail, Phone, ChevronRight, Truck, Calendar, ArrowDownUp, X, Filter, MapPin, Package, User as UserIcon, AlertTriangle, ImageIcon, Download, Loader2, Scale, FileText, Banknote, Lock, Landmark, UserPlus, BookOpen, Trash2, Plus, Image as ImageIcon2, Shield, FileBadge, Upload, Leaf } from 'lucide-react';
+import { Users, Settings, LogOut, ArrowLeft, Ban, CheckCircle, ShieldAlert, Save, Coins, Search, Mail, Phone, ChevronRight, Truck, Calendar, ArrowDownUp, X, Filter, MapPin, Package, User as UserIcon, AlertTriangle, ImageIcon, Download, Loader2, Scale, FileText, Banknote, Lock, Landmark, UserPlus, BookOpen, Trash2, Plus, Image as ImageIcon2, Shield, FileBadge, Upload, Leaf, Maximize2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -210,6 +210,9 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
   const [selectedPickup, setSelectedPickup] = useState<PickupTask | null>(null);
   const [visiblePickupsCount, setVisiblePickupsCount] = useState(PICKUP_BATCH_SIZE);
   const [isLoadingMorePickups, setIsLoadingMorePickups] = useState(false);
+  
+  // Image Viewer State
+  const [viewImage, setViewImage] = useState<string | null>(null);
 
   // Daily Stats State
   const [selectedDayStats, setSelectedDayStats] = useState<{ date: string; weight: number; count: number; items: PickupTask[] } | null>(null);
@@ -1255,10 +1258,17 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
 
                       {/* Scrollable Body */}
                       <div className="overflow-y-auto p-6">
-                          {/* Image */}
+                          {/* Image - Clickable */}
                           {selectedPickup.wasteImage && (
-                              <div className="mb-4 rounded-xl overflow-hidden border border-gray-200">
-                                  <img src={selectedPickup.wasteImage} className="w-full h-48 object-cover" />
+                              <div 
+                                    onClick={() => setViewImage(selectedPickup.wasteImage!)}
+                                    className="mb-4 rounded-xl overflow-hidden border border-gray-200 relative group cursor-pointer"
+                              >
+                                  <img src={selectedPickup.wasteImage} className="w-full h-48 object-cover transition-transform duration-500 group-hover:scale-105" />
+                                   <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors"></div>
+                                   <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-3 py-1.5 rounded-lg backdrop-blur flex items-center gap-1 shadow-sm">
+                                       <Maximize2 className="w-3 h-3" /> Tap to expand
+                                   </div>
                               </div>
                           )}
 
@@ -1607,7 +1617,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
   );
 
   return (
-    <div className="space-y-6 pb-24 h-full flex flex-col">
+    <div className="space-y-6 pb-24 h-full flex flex-col relative">
        {/* Header */}
        <div className="flex justify-between items-center shrink-0">
         <h1 className="text-xl font-bold text-gray-900">Admin Panel</h1>
@@ -1634,6 +1644,24 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
           {currentView === 'TIPS' && renderContentManagement()}
           {currentView === 'CERTIFICATES' && renderCertificatesManagement()}
       </div>
+
+       {/* Full Screen Image Viewer */}
+      {viewImage && (
+          <div className="fixed inset-0 z-[110] bg-black flex items-center justify-center p-4 animate-fade-in" onClick={() => setViewImage(null)}>
+              <button 
+                className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-colors"
+                onClick={() => setViewImage(null)}
+              >
+                  <X className="w-6 h-6" />
+              </button>
+              <img 
+                src={viewImage} 
+                alt="Full View" 
+                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" 
+                onClick={(e) => e.stopPropagation()} 
+              />
+          </div>
+      )}
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, PickupTask } from '../types';
 import { useApp } from '../context/AppContext';
-import { ArrowLeft, Clock, CheckCircle, CircleDashed, Truck, MapPin, Search, ChevronDown, Loader2, X, Phone, Package, ImageIcon } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle, CircleDashed, Truck, MapPin, Search, ChevronDown, Loader2, X, Phone, Package, ImageIcon, Maximize2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -16,6 +16,9 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPickup, setSelectedPickup] = useState<PickupTask | null>(null);
   
+  // Image Viewer State
+  const [viewImage, setViewImage] = useState<string | null>(null);
+
   // Real active pickups from Context
   const activePickups = getPickupsByRole(user.role, user.id);
 
@@ -60,7 +63,7 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
   };
 
   return (
-    <div className="space-y-6 pb-24 animate-fade-in h-full flex flex-col">
+    <div className="space-y-6 pb-24 animate-fade-in h-full flex flex-col relative">
       {/* Header */}
       <div className="flex items-center gap-2 mb-2 sticky top-0 bg-gray-50 dark:bg-gray-900 z-10 py-2">
         <button onClick={onBack} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
@@ -171,7 +174,7 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
         )}
       </div>
 
-      {/* Detail Modal - FIXED SCROLL STRUCTURE */}
+      {/* Detail Modal */}
       {selectedPickup && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedPickup(null)}></div>
@@ -201,12 +204,16 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
                                </div>
                            </div>
 
-                           {/* Image Section */}
+                           {/* Image Section - Clickable */}
                            {selectedPickup.wasteImage && (
-                               <div className="rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 relative group">
-                                   <img src={selectedPickup.wasteImage} alt="Waste" className="w-full h-48 object-cover" />
-                                   <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-lg backdrop-blur flex items-center gap-1">
-                                       <ImageIcon className="w-3 h-3" /> Waste Photo
+                               <div 
+                                    onClick={() => setViewImage(selectedPickup.wasteImage!)}
+                                    className="rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 relative group cursor-pointer"
+                               >
+                                   <img src={selectedPickup.wasteImage} alt="Waste" className="w-full h-48 object-cover transition-transform duration-500 group-hover:scale-105" />
+                                   <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors"></div>
+                                   <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-3 py-1.5 rounded-lg backdrop-blur flex items-center gap-1 shadow-sm">
+                                       <Maximize2 className="w-3 h-3" /> Tap to expand
                                    </div>
                                </div>
                            )}
@@ -245,6 +252,24 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
                        </div>
                    </div>
               </div>
+          </div>
+      )}
+
+      {/* Full Screen Image Viewer */}
+      {viewImage && (
+          <div className="fixed inset-0 z-[110] bg-black flex items-center justify-center p-4 animate-fade-in" onClick={() => setViewImage(null)}>
+              <button 
+                className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-colors"
+                onClick={() => setViewImage(null)}
+              >
+                  <X className="w-6 h-6" />
+              </button>
+              <img 
+                src={viewImage} 
+                alt="Full View" 
+                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" 
+                onClick={(e) => e.stopPropagation()} 
+              />
           </div>
       )}
     </div>

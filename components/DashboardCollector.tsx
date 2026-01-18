@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, PickupTask, UserRole, CollectionItem } from '../types';
 import { useApp } from '../context/AppContext';
-import { Map, List, CheckCircle, Clock, Navigation, LogOut, ChevronRight, X, Phone, User as UserIcon, Package, MapPin, Scale, Coins, Plus, Trash2, ImageIcon } from 'lucide-react';
+import { Map, List, CheckCircle, Clock, Navigation, LogOut, ChevronRight, X, Phone, User as UserIcon, Package, MapPin, Scale, Coins, Plus, Trash2, ImageIcon, Maximize2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -12,6 +12,9 @@ const DashboardCollector: React.FC<Props> = ({ user, onLogout }) => {
   const { getPickupsByRole, updatePickup, wasteRates } = useApp(); // Access dynamic rates
   const [activeTab, setActiveTab] = useState<'routes' | 'collections'>('collections');
   const [selectedTask, setSelectedTask] = useState<PickupTask | null>(null);
+  
+  // Image Viewer State
+  const [viewImage, setViewImage] = useState<string | null>(null);
   
   // Completion State
   const [isCompleting, setIsCompleting] = useState(false);
@@ -238,7 +241,7 @@ const DashboardCollector: React.FC<Props> = ({ user, onLogout }) => {
         </button>
       </div>
 
-      {/* Detail Modal - FLEX COLUMN FIX */}
+      {/* Detail Modal */}
       {selectedTask && (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={closeModal}></div>
@@ -284,12 +287,16 @@ const DashboardCollector: React.FC<Props> = ({ user, onLogout }) => {
                        {/* Customer & Item Info */}
                        {!isCompleting && (
                         <div className="space-y-4">
-                             {/* Image Section */}
+                             {/* Image Section - Clickable */}
                            {selectedTask.wasteImage && (
-                               <div className="rounded-2xl overflow-hidden border border-gray-200 relative group">
-                                   <img src={selectedTask.wasteImage} alt="Waste" className="w-full h-48 object-cover" />
-                                   <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-lg backdrop-blur flex items-center gap-1">
-                                       <ImageIcon className="w-3 h-3" /> Shared Photo
+                               <div 
+                                    onClick={() => setViewImage(selectedTask.wasteImage!)}
+                                    className="rounded-2xl overflow-hidden border border-gray-200 relative group cursor-pointer"
+                               >
+                                   <img src={selectedTask.wasteImage} alt="Waste" className="w-full h-48 object-cover transition-transform duration-500 group-hover:scale-105" />
+                                   <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors"></div>
+                                   <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-3 py-1.5 rounded-lg backdrop-blur flex items-center gap-1 shadow-sm">
+                                       <Maximize2 className="w-3 h-3" /> Tap to expand
                                    </div>
                                </div>
                            )}
@@ -415,6 +422,24 @@ const DashboardCollector: React.FC<Props> = ({ user, onLogout }) => {
                </div>
            </div>
         </div>
+      )}
+
+      {/* Full Screen Image Viewer */}
+      {viewImage && (
+          <div className="fixed inset-0 z-[110] bg-black flex items-center justify-center p-4 animate-fade-in" onClick={() => setViewImage(null)}>
+              <button 
+                className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-colors"
+                onClick={() => setViewImage(null)}
+              >
+                  <X className="w-6 h-6" />
+              </button>
+              <img 
+                src={viewImage} 
+                alt="Full View" 
+                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" 
+                onClick={(e) => e.stopPropagation()} // Prevent closing when clicking image
+              />
+          </div>
       )}
     </div>
   );
