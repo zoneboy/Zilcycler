@@ -132,8 +132,11 @@ CREATE TABLE IF NOT EXISTS drop_off_locations (
 
 -- Default Location
 INSERT INTO drop_off_locations (id, name, address, open_hours, map_url, lat, lng)
-VALUES ('loc_1', 'Zilcycler HQ', '123 Green St, Lagos', '8:00 AM - 6:00 PM', 'https://maps.google.com', 6.5244, 3.3792)
-ON CONFLICT (id) DO NOTHING;
+VALUES ('loc_1', 'Zilcycler HQ', 'Ilorin, Kwara State', '8:00 AM - 6:00 PM', 'https://maps.google.com', 8.5202, 4.5612)
+ON CONFLICT (id) DO UPDATE SET 
+    lat = EXCLUDED.lat,
+    lng = EXCLUDED.lng,
+    address = EXCLUDED.address;
 
 -- Messages Table
 CREATE TABLE IF NOT EXISTS messages (

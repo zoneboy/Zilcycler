@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Navigation, Clock, Loader2, AlertTriangle } from 'lucide-react';
+import { MapPin, Navigation, Clock, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 const DropOffLocations: React.FC = () => {
@@ -8,43 +8,57 @@ const DropOffLocations: React.FC = () => {
   const [locationStatus, setLocationStatus] = useState<string>('Locating...');
   const [userCoords, setUserCoords] = useState<{lat: number; lng: number} | null>(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
 
-  useEffect(() => {
+  const getLocation = () => {
     if (!navigator.geolocation) {
       setLocationStatus('GPS not supported');
       return;
     }
 
+    setIsLocating(true);
+    setLocationStatus('Locating...');
+    setPermissionDenied(false);
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const userLat = position.coords.latitude;
-        const userLng = position.coords.longitude;
-        setUserCoords({ lat: userLat, lng: userLng });
-        
-        const newDistances: {[key: string]: string} = {};
-        
-        dropOffLocations.forEach(loc => {
-          // Calculate precise distance
-          const d = getDistanceFromLatLonInKm(userLat, userLng, loc.lat, loc.lng);
-          newDistances[loc.id] = d < 1 ? `${(d * 1000).toFixed(0)} m` : `${d.toFixed(1)} km`;
+        setUserCoords({ 
+            lat: position.coords.latitude, 
+            lng: position.coords.longitude 
         });
-        
-        setDistances(newDistances);
         setLocationStatus('');
-        setPermissionDenied(false);
+        setIsLocating(false);
       },
       (error) => {
         console.error("Error getting location", error);
         setLocationStatus('GPS access denied');
         setPermissionDenied(true);
+        setIsLocating(false);
       },
       { 
         enableHighAccuracy: true, 
-        timeout: 10000, 
+        timeout: 15000, 
         maximumAge: 0 
       }
     );
-  }, [dropOffLocations]);
+  };
+
+  // Initial fetch
+  useEffect(() => {
+    getLocation();
+  }, []);
+
+  // Calculate distances whenever coords or locations change
+  useEffect(() => {
+    if (userCoords && dropOffLocations.length > 0) {
+        const newDistances: {[key: string]: string} = {};
+        dropOffLocations.forEach(loc => {
+          const d = getDistanceFromLatLonInKm(userCoords.lat, userCoords.lng, loc.lat, loc.lng);
+          newDistances[loc.id] = d < 1 ? `${(d * 1000).toFixed(0)} m` : `${d.toFixed(1)} km`;
+        });
+        setDistances(newDistances);
+    }
+  }, [userCoords, dropOffLocations]);
 
   const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371; // Radius of the earth in km
@@ -83,15 +97,28 @@ const DropOffLocations: React.FC = () => {
         {permissionDenied ? (
              <div className="absolute bottom-4 bg-red-100 dark:bg-red-900/80 px-4 py-2 rounded-xl text-xs font-bold text-red-700 dark:text-red-200 shadow-sm backdrop-blur flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4" /> Enable GPS for distances
+                <button onClick={getLocation} className="ml-2 bg-white/50 p-1 rounded-full hover:bg-white/80"><RefreshCw className="w-3 h-3" /></button>
             </div>
         ) : (
             <div className="absolute bottom-4 bg-white/90 dark:bg-gray-800/90 px-4 py-1 rounded-full text-xs font-bold text-green-800 dark:text-green-400 shadow-sm backdrop-blur transition-colors flex items-center gap-2">
-                {userCoords ? 'Locations near you' : <><Loader2 className="w-3 h-3 animate-spin"/> Locating you...</>}
+                {isLocating ? (
+                    <><Loader2 className="w-3 h-3 animate-spin"/> {locationStatus}</>
+                ) : userCoords ? (
+                    <span className="flex items-center gap-2">
+                        Locations near you 
+                        <button onClick={getLocation} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full" title="Refresh Location"><RefreshCw className="w-3 h-3" /></button>
+                    </span>
+                ) : (
+                    <><Loader2 className="w-3 h-3 animate-spin"/> Locating...</>
+                )}
             </div>
         )}
       </div>
 
-      <h2 className="font-bold text-gray-800 dark:text-white text-lg">Nearby Centers</h2>
+      <div className="flex justify-between items-center">
+          <h2 className="font-bold text-gray-800 dark:text-white text-lg">Nearby Centers</h2>
+          {userCoords && <span className="text-[10px] text-green-600 font-medium">GPS Active</span>}
+      </div>
 
       <div className="space-y-4">
         {dropOffLocations.length === 0 ? (
