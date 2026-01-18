@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, UserRole, Screen } from './types';
 import { AppProvider, useApp } from './context/AppContext';
 import Auth from './components/Auth';
@@ -18,28 +18,63 @@ import Certificates from './components/Certificates';
 import { Home, FileText, Settings as SettingsIcon, LogOut, ArrowLeft, Building2, Wallet } from 'lucide-react';
 
 const MainApp: React.FC = () => {
-  const { users } = useApp();
-  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
-  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.AUTH);
-
-  // Get live user data from context with defensive check
-  const currentUser = users.find(u => u && u.id === sessionUserId) || null;
+  const { users, loading } = useApp();
+  
+  // Initialize state from localStorage
+  const [sessionUserId, setSessionUserId] = useState<string | null>(() => {
+      return localStorage.getItem('zilcycler_session_id');
+  });
+  
+  // Set initial screen based on session existence
+  const [currentScreen, setCurrentScreen] = useState<Screen>(() => {
+      return localStorage.getItem('zilcycler_session_id') ? Screen.DASHBOARD : Screen.AUTH;
+  });
 
   const handleLogin = (userId: string) => {
+    localStorage.setItem('zilcycler_session_id', userId);
     setSessionUserId(userId);
     setCurrentScreen(Screen.DASHBOARD);
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('zilcycler_session_id');
     setSessionUserId(null);
     setCurrentScreen(Screen.AUTH);
   };
+
+  // Validate session when users are loaded
+  useEffect(() => {
+      if (!loading && sessionUserId) {
+          const validUser = users.find(u => u.id === sessionUserId);
+          if (!validUser) {
+              // User ID in storage but not in DB (deleted or invalid)
+              handleLogout();
+          }
+      }
+  }, [loading, users, sessionUserId]);
+
+  if (loading) {
+       return (
+        <div className="h-screen w-full flex flex-col items-center justify-center text-green-800 bg-gray-50 dark:bg-gray-900">
+           <div className="w-8 h-8 border-4 border-green-200 border-t-green-700 rounded-full animate-spin mb-4"></div>
+           <span className="font-bold dark:text-white">Initializing Zilcycler...</span>
+        </div>
+      );
+  }
+
+  // Get live user data from context with defensive check
+  const currentUser = users.find(u => u && u.id === sessionUserId) || null;
 
   const renderScreen = () => {
     // Fallback if context user not found
     const effectiveUser = currentUser;
 
-    if (!effectiveUser) return <div className="p-10 text-center">User not found. Please log out and try again. <br/><button onClick={handleLogout} className="mt-4 text-blue-600 underline">Logout</button></div>;
+    // If still at Dashboard screen but no user found (and not loading), redirect to auth or show error
+    if (!effectiveUser && currentScreen !== Screen.AUTH) {
+        return <Auth onLogin={handleLogin} />;
+    }
+
+    if (!effectiveUser) return <Auth onLogin={handleLogin} />;
 
     switch (currentScreen) {
       case Screen.DASHBOARD:
@@ -66,7 +101,7 @@ const MainApp: React.FC = () => {
       case Screen.DROP_OFF:
         return <DropOffLocations />;
       case Screen.MESSAGES:
-        return <MessagesWithUser user={effectiveUser} />; // Pass user prop
+        return <MessagesWithUser user={effectiveUser} />; 
       case Screen.WALLET:
         return <WalletScreen user={effectiveUser} />;
       case Screen.PICKUP_HISTORY:
@@ -77,11 +112,6 @@ const MainApp: React.FC = () => {
         return <DashboardHousehold user={effectiveUser} onNavigate={setCurrentScreen} />; // Fallback
     }
   };
-
-  if (!sessionUserId && currentScreen !== Screen.AUTH) {
-      // Safety check
-      setCurrentScreen(Screen.AUTH);
-  }
 
   if (currentScreen === Screen.AUTH) {
     return <Auth onLogin={handleLogin} />;
