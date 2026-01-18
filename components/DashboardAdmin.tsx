@@ -1112,7 +1112,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
            {isAddUserOpen && (
                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsAddUserOpen(false)}></div>
-                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6">
+                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
                        <h3 className="text-lg font-bold text-gray-900 mb-4">Add {addingRole === UserRole.COLLECTOR ? 'Collector' : 'Staff'}</h3>
                        <form onSubmit={handleAddUser} className="space-y-3">
                            <input type="text" placeholder="Full Name" required className="w-full p-3 bg-gray-50 border rounded-xl" value={newUserForm.name} onChange={e => setNewUserForm({...newUserForm, name: e.target.value})} />
@@ -1380,7 +1380,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
            {isAddTipOpen && (
                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsAddTipOpen(false)}></div>
-                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6">
+                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
                        <h3 className="text-lg font-bold text-gray-900 mb-4">Add New Tip</h3>
                        <form onSubmit={handleAddTip} className="space-y-3">
                            <input type="text" placeholder="Title" required className="w-full p-3 bg-gray-50 border rounded-xl text-sm" value={newTip.title} onChange={e => setNewTip({...newTip, title: e.target.value})} />
@@ -1438,7 +1438,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
            {isCertModalOpen && (
                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsCertModalOpen(false)}></div>
-                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6">
+                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
                        <h3 className="text-lg font-bold text-gray-900 mb-4">Issue Certificate</h3>
                        <form onSubmit={handleAddCertificate} className="space-y-3">
                            <div>

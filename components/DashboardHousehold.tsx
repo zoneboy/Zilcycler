@@ -235,7 +235,7 @@ const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowBreakdown(false)}></div>
            
            {/* Content */}
-           <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-xs p-6 relative z-10 shadow-2xl animate-fade-in-up transition-colors">
+           <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-xs p-6 relative z-10 shadow-2xl animate-fade-in-up transition-colors max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6">
                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">Your Impact</h2>
                  <button onClick={() => setShowBreakdown(false)} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
