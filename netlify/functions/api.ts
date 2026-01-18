@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import bcrypt from 'bcryptjs';
 
 // Helper for standard response
 const response = (statusCode: number, body: any) => ({
@@ -58,19 +59,15 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
 }
 
 // Password Utils
-const hashPassword = (password: string) => {
-    const salt = crypto.randomBytes(16).toString('hex');
-    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-    return `${salt}:${hash}`;
+const SALT_ROUNDS = 12;
+
+const hashPassword = async (password: string) => {
+  return await bcrypt.hash(password, SALT_ROUNDS);
 };
 
-const verifyPassword = (password: string, storedHash: string) => {
+const verifyPassword = async (password: string, storedHash: string) => {
     if (!storedHash) return false;
-    const parts = storedHash.split(':');
-    if (parts.length !== 2) return false;
-    const [salt, originalHash] = parts;
-    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-    return hash === originalHash;
+    return await bcrypt.compare(password, storedHash);
 };
 
 export const handler = async (event: any) => {
@@ -123,7 +120,7 @@ export const handler = async (event: any) => {
              return response(503, { error: "System is in maintenance mode. Staff access only." });
         }
 
-        const isValid = verifyPassword(password, dbUser.password_hash);
+        const isValid = await verifyPassword(password, dbUser.password_hash);
         if (!isValid) return response(401, { error: "Invalid email or password" });
 
         const token = jwt.sign(
@@ -216,7 +213,7 @@ export const handler = async (event: any) => {
         if (otpCheck.rows.length === 0 || otpCheck.rows[0].otp !== otp) return response(400, { error: "Invalid code" });
         if (new Date(otpCheck.rows[0].expires_at) < new Date()) return response(400, { error: "Code expired" });
 
-        const passwordHash = hashPassword(password);
+        const passwordHash = await hashPassword(password);
         // Generate Server-Side ID
         const userId = `u_${randomUUID()}`;
 
@@ -254,7 +251,7 @@ export const handler = async (event: any) => {
         const { rows } = await query('SELECT * FROM password_resets WHERE email = $1', [email]);
         if (rows.length === 0 || rows[0].otp !== otp) return response(400, { error: "Invalid code" });
         
-        const passwordHash = hashPassword(newPassword);
+        const passwordHash = await hashPassword(newPassword);
         await query('UPDATE users SET password_hash = $1 WHERE email = $2', [passwordHash, email]);
         await query('DELETE FROM password_resets WHERE email = $1', [email]);
         return response(200, { success: true });
@@ -276,7 +273,7 @@ export const handler = async (event: any) => {
             if (user.userId !== userId) return response(403, { error: "Forbidden" });
 
             const { rows } = await query('SELECT email, password_hash FROM users WHERE id = $1', [userId]);
-            if (!verifyPassword(currentPassword, rows[0].password_hash)) return response(401, { error: "Incorrect password" });
+            if (!(await verifyPassword(currentPassword, rows[0].password_hash))) return response(401, { error: "Incorrect password" });
 
             const otp = Math.floor(100000 + Math.random() * 900000).toString();
             const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
@@ -298,7 +295,7 @@ export const handler = async (event: any) => {
             const { rows } = await query('SELECT * FROM password_resets WHERE email = $1', [email]);
             if (rows.length === 0 || rows[0].otp !== otp) return response(400, { error: "Invalid code" });
 
-            const passwordHash = hashPassword(newPassword);
+            const passwordHash = await hashPassword(newPassword);
             await query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
             await query('DELETE FROM password_resets WHERE email = $1', [email]);
             return response(200, { success: true });
@@ -440,7 +437,7 @@ export const handler = async (event: any) => {
       if (method === 'POST') {
         if (user.role !== 'ADMIN') return response(403, { error: "Only admins can create users manually" });
         const { name, email, role, phone, password, gender, address, industry, avatar } = body;
-        const passwordHash = password ? hashPassword(password) : null;
+        const passwordHash = password ? await hashPassword(password) : null;
         const userId = `u_${randomUUID()}`;
         
         await query(

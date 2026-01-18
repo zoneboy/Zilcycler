@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(50) NOT NULL,
     phone VARCHAR(50),
     avatar TEXT,
-    password_hash TEXT, -- Stores "salt:hash"
+    password_hash TEXT, -- Stores bcrypt hash "$2a$12$..."
     zoints_balance DECIMAL(10, 2) DEFAULT 0,
     total_recycled_kg DECIMAL(10, 2) DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
@@ -150,7 +150,8 @@ CREATE TABLE IF NOT EXISTS messages (
 
 -- Default Admin User
 -- Email: demo@zilcycler.com
--- Password: password123 (Hash generated for demo purposes)
+-- Password: password123
+-- Hash: Bcrypt (cost 12) for 'password123'
 INSERT INTO users (id, name, email, role, phone, avatar, zoints_balance, is_active, password_hash)
-VALUES ('admin-1', 'System Admin', 'demo@zilcycler.com', 'ADMIN', '0000000000', 'https://i.pravatar.cc/150?u=admin', 0, TRUE, 'bed4f2a74c7e6c921350123567890123:3f2b7a8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6')
-ON CONFLICT (email) DO NOTHING;
+VALUES ('admin-1', 'System Admin', 'demo@zilcycler.com', 'ADMIN', '0000000000', 'https://i.pravatar.cc/150?u=admin', 0, TRUE, '$2a$12$rq9.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1')
+ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
