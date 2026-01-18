@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, UserRole, WasteRates, PickupTask, RedemptionRequest, BlogPost, Certificate } from '../types';
 import { useApp } from '../context/AppContext';
-import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
+import { Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import { Users, Settings, LogOut, ArrowLeft, Ban, CheckCircle, ShieldAlert, Save, Coins, Search, Mail, Phone, ChevronRight, Truck, Calendar, ArrowDownUp, X, Filter, MapPin, Package, User as UserIcon, AlertTriangle, ImageIcon, Download, Loader2, Scale, FileText, Banknote, Lock, Landmark, UserPlus, BookOpen, Trash2, Plus, Image as ImageIcon2, Shield, FileBadge, Upload, Leaf } from 'lucide-react';
 
 interface Props {
@@ -357,53 +357,6 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       document.body.removeChild(link);
   };
 
-  // Dynamic Weekly Stats Calculation
-  const weeklyStats = useMemo(() => {
-    // 1. Group completed pickups by date
-    const groupedData: { [date: string]: { weight: number; count: number; items: PickupTask[] } } = {};
-
-    pickups.forEach(p => {
-        if (p && p.status === 'Completed' && p.weight) {
-            // Normalize date string if needed, assuming YYYY-MM-DD or readable string
-            const dateKey = p.date; 
-            if (!groupedData[dateKey]) {
-                groupedData[dateKey] = { weight: 0, count: 0, items: [] };
-            }
-            groupedData[dateKey].weight += p.weight;
-            groupedData[dateKey].count += 1;
-            groupedData[dateKey].items.push(p);
-        }
-    });
-
-    // 2. Convert to array and sort by date
-    const sortedStats = Object.entries(groupedData)
-        .map(([date, data]) => ({
-            name: new Date(date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }), // e.g., "Mon 12"
-            fullDate: date,
-            value: data.weight,
-            count: data.count,
-            items: data.items
-        }))
-        .sort((a, b) => new Date(a.fullDate).getTime() - new Date(b.fullDate).getTime());
-
-    // 3. Take only the last 7 entries if there are many
-    return sortedStats.slice(-7);
-  }, [pickups]);
-
-  // Simplified handler attached directly to Bar component
-  const handleBarClick = (data: any) => {
-    if (data) {
-        setSelectedDayStats({
-            date: data.fullDate,
-            weight: data.value,
-            count: data.count,
-            items: data.items
-        });
-        setCurrentView('DAILY_STATS');
-    }
-  };
-
-
   // Check if date filtering is active
   const isDateFilterActive = !!(dateRange.start && dateRange.end);
 
@@ -521,24 +474,6 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                      </div>
                      <span className="text-2xl font-bold text-gray-900">{pickups.length}</span>
                  </div>
-             </div>
-
-             {/* Chart Section */}
-             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                 <h3 className="font-bold text-gray-800 mb-4">Weekly Recycling Volume</h3>
-                 <div className="h-64">
-                     <ResponsiveContainer width="100%" height="100%">
-                         <BarChart data={weeklyStats} onClick={handleBarClick}>
-                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#9ca3af'}} />
-                             <Tooltip 
-                                 cursor={{fill: '#f3f4f6'}} 
-                                 contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} 
-                             />
-                             <Bar dataKey="value" fill="#16a34a" radius={[4, 4, 0, 0]} barSize={40} />
-                         </BarChart>
-                     </ResponsiveContainer>
-                 </div>
-                 <p className="text-center text-xs text-gray-400 mt-2">Tap a bar to view daily details</p>
              </div>
 
              {/* Reports Section */}
