@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
 import { useApp } from '../context/AppContext';
-import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, AlertCircle, ArrowLeft, Save, Lock, Eye, EyeOff, Check, Globe, Trash2, AlertTriangle, Landmark, Camera, KeyRound } from 'lucide-react';
+import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, AlertCircle, ArrowLeft, Save, Lock, Eye, EyeOff, Check, Globe, Trash2, AlertTriangle, Landmark, Camera, KeyRound, Loader2 } from 'lucide-react';
+
+// Access environment variables injected by Vite
+const env = (import.meta as any).env || ({} as any);
+const CLOUDINARY_CLOUD_NAME = env.VITE_CLOUDINARY_CLOUD_NAME; 
+const CLOUDINARY_UPLOAD_PRESET = env.VITE_CLOUDINARY_UPLOAD_PRESET; 
 
 interface Props {
   user: User;
@@ -41,6 +46,7 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     accountName: user.bankDetails?.accountName || ''
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   // Privacy State
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
@@ -61,7 +67,40 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     localStorage.setItem('darkMode', String(darkMode));
   }, [darkMode]);
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const uploadToCloudinary = async (file: File): Promise<string | null> => {
+      // Safety check for environment variables
+      if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+          console.error("Cloudinary credentials missing. Ensure VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET are set.");
+          alert("System Configuration Error: Image upload is currently disabled. Please contact support.");
+          return null;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+      formData.append('folder', 'zilcycler_avatars'); 
+
+      try {
+          const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+              method: 'POST',
+              body: formData
+          });
+
+          if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error?.message || 'Upload failed');
+          }
+
+          const data = await response.json();
+          return data.secure_url;
+      } catch (error) {
+          console.error("Cloudinary Upload Error:", error);
+          alert("Failed to upload image. Please check your internet connection or try again.");
+          return null;
+      }
+  };
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       // Basic size validation (e.g., max 2MB)
@@ -70,11 +109,13 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
           return;
       }
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({ ...formData, avatar: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+      setIsUploadingAvatar(true);
+      const url = await uploadToCloudinary(file);
+      setIsUploadingAvatar(false);
+
+      if (url) {
+        setFormData({ ...formData, avatar: url });
+      }
     }
   };
 
@@ -268,26 +309,35 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
         <form onSubmit={handleSaveAccount} className="space-y-4">
              {/* Avatar Section */}
              <div className="flex flex-col items-center mb-6">
-                 <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                    {formData.avatar ? (
+                 <div className="relative group cursor-pointer" onClick={() => !isUploadingAvatar && fileInputRef.current?.click()}>
+                    {isUploadingAvatar ? (
+                        <div className="w-24 h-24 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center border-4 border-white dark:border-gray-800 shadow-lg">
+                            <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+                        </div>
+                    ) : formData.avatar ? (
                         <img src={formData.avatar} alt="Profile" className="w-24 h-24 rounded-full border-4 border-white dark:border-gray-800 shadow-lg object-cover" />
                     ) : (
                         <div className="w-24 h-24 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-400 dark:text-gray-500 border-4 border-white dark:border-gray-800 shadow-lg">
                             <CircleUser className="w-12 h-12" />
                         </div>
                     )}
-                    <div className="absolute bottom-0 right-0 bg-green-600 text-white p-2 rounded-full shadow-md hover:bg-green-700 transition-colors">
-                         <Camera className="w-4 h-4" />
-                    </div>
+                    {!isUploadingAvatar && (
+                        <div className="absolute bottom-0 right-0 bg-green-600 text-white p-2 rounded-full shadow-md hover:bg-green-700 transition-colors">
+                            <Camera className="w-4 h-4" />
+                        </div>
+                    )}
                     <input 
                         type="file" 
                         ref={fileInputRef} 
                         className="hidden" 
                         accept="image/*" 
                         onChange={handleImageChange} 
+                        disabled={isUploadingAvatar}
                     />
                  </div>
-                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Tap to change photo</p>
+                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                     {isUploadingAvatar ? 'Uploading...' : 'Tap to change photo'}
+                 </p>
              </div>
 
             <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4 transition-colors">
