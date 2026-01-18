@@ -171,72 +171,76 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
         )}
       </div>
 
-      {/* Detail Modal - Unified Scroll Structure */}
+      {/* Detail Modal - FLEX COLUMN FIX */}
       {selectedPickup && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedPickup(null)}></div>
-              <div className="bg-white dark:bg-gray-800 rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl animate-fade-in-up p-6 max-h-[85vh] overflow-y-auto">
-                   <div className="flex justify-between items-center mb-6">
+              <div className="bg-white dark:bg-gray-800 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl relative z-10 flex flex-col max-h-[85vh] animate-fade-in-up">
+                   {/* Sticky Header */}
+                   <div className="flex justify-between items-center p-6 border-b border-gray-100 dark:border-gray-700 shrink-0">
                        <h3 className="font-bold text-gray-900 dark:text-white">Pickup Details</h3>
                        <button onClick={() => setSelectedPickup(null)} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
                            <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
                        </button>
                    </div>
 
-                   <div className="space-y-6">
-                       <div className="flex items-center justify-between">
-                           <div>
-                               <p className="text-xs text-gray-400 font-bold uppercase mb-1">Status</p>
-                               <span className={`px-3 py-1 rounded-full text-sm font-bold border ${getStatusColor(selectedPickup.status)}`}>
-                                   {selectedPickup.status}
-                               </span>
-                           </div>
-                           <div className="text-right">
-                               <p className="text-xs text-gray-400 font-bold uppercase mb-1">Date</p>
-                               <p className="text-lg font-bold text-gray-800 dark:text-white">{selectedPickup.date}</p>
-                           </div>
-                       </div>
-
-                       {/* Image Section */}
-                       {selectedPickup.wasteImage && (
-                           <div className="rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 relative group">
-                               <img src={selectedPickup.wasteImage} alt="Waste" className="w-full h-48 object-cover" />
-                               <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-lg backdrop-blur flex items-center gap-1">
-                                   <ImageIcon className="w-3 h-3" /> Waste Photo
-                               </div>
-                           </div>
-                       )}
-
-                       <div className="space-y-4">
-                           <div className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl border border-gray-100 dark:border-gray-700">
-                               <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-400 shadow-sm shrink-0">
-                                   <Package className="w-5 h-5" />
-                               </div>
+                   {/* Scrollable Body */}
+                   <div className="overflow-y-auto p-6">
+                       <div className="space-y-6">
+                           <div className="flex items-center justify-between">
                                <div>
-                                   <p className="text-xs text-gray-400 font-bold uppercase">Items</p>
-                                   <p className="font-medium text-gray-800 dark:text-white">{selectedPickup.items}</p>
+                                   <p className="text-xs text-gray-400 font-bold uppercase mb-1">Status</p>
+                                   <span className={`px-3 py-1 rounded-full text-sm font-bold border ${getStatusColor(selectedPickup.status)}`}>
+                                       {selectedPickup.status}
+                                   </span>
+                               </div>
+                               <div className="text-right">
+                                   <p className="text-xs text-gray-400 font-bold uppercase mb-1">Date</p>
+                                   <p className="text-lg font-bold text-gray-800 dark:text-white">{selectedPickup.date}</p>
                                </div>
                            </div>
-                           <div className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl border border-gray-100 dark:border-gray-700">
-                               <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-400 shadow-sm shrink-0">
-                                   <MapPin className="w-5 h-5" />
-                               </div>
-                               <div>
-                                   <p className="text-xs text-gray-400 font-bold uppercase">Location</p>
-                                   <p className="font-medium text-gray-800 dark:text-white">{selectedPickup.location}</p>
-                               </div>
-                           </div>
-                           {selectedPickup.phoneNumber && (
-                               <div className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl border border-gray-100 dark:border-gray-700">
-                                   <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-400 shadow-sm shrink-0">
-                                       <Phone className="w-5 h-5" />
-                                   </div>
-                                   <div>
-                                       <p className="text-xs text-gray-400 font-bold uppercase">Contact</p>
-                                       <p className="font-medium text-gray-800 dark:text-white">{selectedPickup.phoneNumber}</p>
+
+                           {/* Image Section */}
+                           {selectedPickup.wasteImage && (
+                               <div className="rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 relative group">
+                                   <img src={selectedPickup.wasteImage} alt="Waste" className="w-full h-48 object-cover" />
+                                   <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-lg backdrop-blur flex items-center gap-1">
+                                       <ImageIcon className="w-3 h-3" /> Waste Photo
                                    </div>
                                </div>
                            )}
+
+                           <div className="space-y-4">
+                               <div className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl border border-gray-100 dark:border-gray-700">
+                                   <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-400 shadow-sm shrink-0">
+                                       <Package className="w-5 h-5" />
+                                   </div>
+                                   <div>
+                                       <p className="text-xs text-gray-400 font-bold uppercase">Items</p>
+                                       <p className="font-medium text-gray-800 dark:text-white">{selectedPickup.items}</p>
+                                   </div>
+                               </div>
+                               <div className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl border border-gray-100 dark:border-gray-700">
+                                   <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-400 shadow-sm shrink-0">
+                                       <MapPin className="w-5 h-5" />
+                                   </div>
+                                   <div>
+                                       <p className="text-xs text-gray-400 font-bold uppercase">Location</p>
+                                       <p className="font-medium text-gray-800 dark:text-white">{selectedPickup.location}</p>
+                                   </div>
+                               </div>
+                               {selectedPickup.phoneNumber && (
+                                   <div className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl border border-gray-100 dark:border-gray-700">
+                                       <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-400 shadow-sm shrink-0">
+                                           <Phone className="w-5 h-5" />
+                                       </div>
+                                       <div>
+                                           <p className="text-xs text-gray-400 font-bold uppercase">Contact</p>
+                                           <p className="font-medium text-gray-800 dark:text-white">{selectedPickup.phoneNumber}</p>
+                                       </div>
+                                   </div>
+                               )}
+                           </div>
                        </div>
                    </div>
               </div>

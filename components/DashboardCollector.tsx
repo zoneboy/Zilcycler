@@ -238,174 +238,180 @@ const DashboardCollector: React.FC<Props> = ({ user, onLogout }) => {
         </button>
       </div>
 
-      {/* Detail Modal - Unified Scroll Structure */}
+      {/* Detail Modal - FLEX COLUMN FIX */}
       {selectedTask && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={closeModal}></div>
-           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-[85vh] overflow-y-auto">
+           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-[85vh]">
                
-               {/* Header Content Inside Scroll Area */}
-               <div className="h-40 bg-gray-200 relative overflow-hidden shrink-0">
-                    <div className="absolute inset-0 bg-[url('https://upload.wikimedia.org/wikipedia/commons/e/ec/OpenStreetMap_Mapnik_example.png')] bg-cover opacity-50"></div>
+               {/* Sticky Header with Close Button */}
+               <div className="absolute top-4 right-4 z-30">
                     <button 
                         onClick={closeModal}
-                        className="absolute top-4 right-4 bg-white p-2 rounded-full shadow-md z-20 hover:bg-gray-100"
+                        className="bg-white p-2 rounded-full shadow-md hover:bg-gray-100 transition-colors"
                     >
                         <X className="w-5 h-5 text-gray-800" />
                     </button>
-                    <div className="absolute bottom-4 left-4 right-4">
-                        <span className="bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-gray-800 shadow-sm flex items-center gap-1 w-fit">
-                            <MapPin className="w-3 h-3 text-red-500" /> {selectedTask.location}
-                        </span>
-                    </div>
                </div>
 
-               <div className="p-6 space-y-6">
-                   <div className="flex items-center justify-between">
-                       <div>
-                           <p className="text-xs text-gray-400 font-bold uppercase mb-1">Status</p>
-                           <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                               selectedTask.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
-                           }`}>
-                               {selectedTask.status}
-                           </span>
-                       </div>
-                       <div className="text-right">
-                           <p className="text-xs text-gray-400 font-bold uppercase mb-1">Scheduled Time</p>
-                           <p className="text-lg font-bold text-gray-800">{selectedTask.time}</p>
-                       </div>
+               {/* Header Content Inside Scroll Area */}
+               <div className="overflow-y-auto">
+                   <div className="h-40 bg-gray-200 relative overflow-hidden shrink-0">
+                        <div className="absolute inset-0 bg-[url('https://upload.wikimedia.org/wikipedia/commons/e/ec/OpenStreetMap_Mapnik_example.png')] bg-cover opacity-50"></div>
+                        <div className="absolute bottom-4 left-4 right-4">
+                            <span className="bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-gray-800 shadow-sm flex items-center gap-1 w-fit">
+                                <MapPin className="w-3 h-3 text-red-500" /> {selectedTask.location}
+                            </span>
+                        </div>
                    </div>
 
-                   {/* Customer & Item Info */}
-                   {!isCompleting && (
-                    <div className="space-y-4">
-                         {/* Image Section */}
-                       {selectedTask.wasteImage && (
-                           <div className="rounded-2xl overflow-hidden border border-gray-200 relative group">
-                               <img src={selectedTask.wasteImage} alt="Waste" className="w-full h-48 object-cover" />
-                               <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-lg backdrop-blur flex items-center gap-1">
-                                   <ImageIcon className="w-3 h-3" /> Shared Photo
-                               </div>
+                   <div className="p-6 space-y-6">
+                       <div className="flex items-center justify-between">
+                           <div>
+                               <p className="text-xs text-gray-400 font-bold uppercase mb-1">Status</p>
+                               <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                                   selectedTask.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                               }`}>
+                                   {selectedTask.status}
+                               </span>
                            </div>
-                       )}
-
-                        <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-gray-400 shadow-sm">
-                                <UserIcon className="w-5 h-5" />
-                            </div>
-                            <div className="flex-1">
-                                <p className="text-xs text-gray-400 font-bold uppercase">Customer</p>
-                                <p className="font-bold text-gray-800">{selectedTask.contact}</p>
-                                {selectedTask.phoneNumber && (
-                                    <a href={`tel:${selectedTask.phoneNumber}`} className="text-green-600 text-xs font-bold flex items-center gap-1 mt-1 hover:underline">
-                                        <Phone className="w-3 h-3" /> Call Customer
-                                    </a>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-gray-400 shadow-sm">
-                                <Package className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase">Waste Items</p>
-                                <p className="font-medium text-gray-800">{selectedTask.items}</p>
-                            </div>
-                        </div>
-                    </div>
-                   )}
-
-                   {/* Completion Workflow */}
-                   {selectedTask.status !== 'Completed' ? (
-                       !isCompleting ? (
-                           <button 
-                               onClick={initiateCompletion}
-                               className="w-full bg-green-700 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-green-800 transition-transform active:scale-95 flex items-center justify-center gap-2"
-                           >
-                               <CheckCircle className="w-5 h-5" /> Complete Pickup
-                           </button>
-                       ) : (
-                           <div className="animate-fade-in-up space-y-4">
-                               <div className="flex justify-between items-center">
-                                   <h4 className="font-bold text-gray-800">Record Weights</h4>
-                                   <div className="text-xs text-gray-500">
-                                       Rates per kg are set by Admin
-                                   </div>
-                               </div>
-
-                               <div className="space-y-3">
-                                   {collectionItems.map((item, idx) => (
-                                       <div key={idx} className="flex gap-2 items-center">
-                                           <div className="flex-1 bg-gray-50 rounded-xl px-3 py-2 border border-gray-200">
-                                               <p className="text-xs font-bold text-gray-500 uppercase">{item.category}</p>
-                                               <p className="text-xs text-green-600">{item.rate} Z/kg</p>
-                                           </div>
-                                           <div className="relative w-24">
-                                               <input 
-                                                  type="number"
-                                                  placeholder="0"
-                                                  value={item.weight || ''}
-                                                  onChange={(e) => handleWeightChange(idx, e.target.value)}
-                                                  className="w-full p-2 pr-8 rounded-xl border border-gray-300 focus:outline-none focus:border-green-500 text-right font-bold"
-                                               />
-                                               <span className="absolute right-3 top-2.5 text-xs text-gray-400">kg</span>
-                                           </div>
-                                           <button onClick={() => removeItemRow(idx)} className="p-2 text-red-400 hover:text-red-600">
-                                               <Trash2 className="w-4 h-4" />
-                                           </button>
-                                       </div>
-                                   ))}
-                                   
-                                   <button onClick={addNewItemRow} className="text-xs font-bold text-green-600 flex items-center gap-1 hover:underline">
-                                       <Plus className="w-3 h-3" /> Add Item
-                                   </button>
-                               </div>
-
-                               <div className="bg-green-50 p-4 rounded-2xl border border-green-200 flex justify-between items-center">
-                                   <div>
-                                       <p className="text-xs font-bold text-green-800 uppercase">Total Earned</p>
-                                       <p className="text-2xl font-bold text-green-700">{getTotalStats().earned} Z</p>
-                                   </div>
-                                   <div className="text-right">
-                                       <p className="text-xs font-bold text-green-800 uppercase">Total Weight</p>
-                                       <p className="text-lg font-bold text-green-700">{getTotalStats().weight} kg</p>
-                                   </div>
-                               </div>
-
-                               <button 
-                                   onClick={confirmCompletion}
-                                   className="w-full bg-green-700 text-white py-3 rounded-xl font-bold shadow-md hover:bg-green-800 transition-colors flex items-center justify-center gap-2"
-                               >
-                                   <Coins className="w-4 h-4" /> Confirm Collection
-                               </button>
+                           <div className="text-right">
+                               <p className="text-xs text-gray-400 font-bold uppercase mb-1">Scheduled Time</p>
+                               <p className="text-lg font-bold text-gray-800">{selectedTask.time}</p>
                            </div>
-                       )
-                   ) : (
-                       <div className="w-full bg-gray-100 text-gray-500 py-4 rounded-2xl text-center space-y-3">
-                           <div className="flex items-center justify-center gap-2 font-bold">
-                               <CheckCircle className="w-5 h-5" /> Pickup Completed
-                           </div>
-                           
-                           {/* Breakdown Summary for Completed Task */}
-                           {selectedTask.collectionDetails && (
-                               <div className="px-4 text-xs">
-                                   <div className="grid grid-cols-2 gap-2 text-left mb-2">
-                                       {selectedTask.collectionDetails.map((item, i) => (
-                                           <div key={i} className="flex justify-between border-b border-gray-200 pb-1">
-                                               <span>{item.category}</span>
-                                               <span className="font-bold">{item.weight} kg</span>
-                                           </div>
-                                       ))}
-                                   </div>
-                                   <div className="flex justify-between pt-2 font-bold text-gray-700 border-t border-gray-300">
-                                       <span>Total: {selectedTask.weight} kg</span>
-                                       <span className="text-green-600">+{selectedTask.earnedZoints} Z</span>
+                       </div>
+
+                       {/* Customer & Item Info */}
+                       {!isCompleting && (
+                        <div className="space-y-4">
+                             {/* Image Section */}
+                           {selectedTask.wasteImage && (
+                               <div className="rounded-2xl overflow-hidden border border-gray-200 relative group">
+                                   <img src={selectedTask.wasteImage} alt="Waste" className="w-full h-48 object-cover" />
+                                   <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-lg backdrop-blur flex items-center gap-1">
+                                       <ImageIcon className="w-3 h-3" /> Shared Photo
                                    </div>
                                </div>
                            )}
-                       </div>
-                   )}
+
+                            <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-gray-400 shadow-sm">
+                                    <UserIcon className="w-5 h-5" />
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-xs text-gray-400 font-bold uppercase">Customer</p>
+                                    <p className="font-bold text-gray-800">{selectedTask.contact}</p>
+                                    {selectedTask.phoneNumber && (
+                                        <a href={`tel:${selectedTask.phoneNumber}`} className="text-green-600 text-xs font-bold flex items-center gap-1 mt-1 hover:underline">
+                                            <Phone className="w-3 h-3" /> Call Customer
+                                        </a>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-gray-400 shadow-sm">
+                                    <Package className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-gray-400 font-bold uppercase">Waste Items</p>
+                                    <p className="font-medium text-gray-800">{selectedTask.items}</p>
+                                </div>
+                            </div>
+                        </div>
+                       )}
+
+                       {/* Completion Workflow */}
+                       {selectedTask.status !== 'Completed' ? (
+                           !isCompleting ? (
+                               <button 
+                                   onClick={initiateCompletion}
+                                   className="w-full bg-green-700 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-green-800 transition-transform active:scale-95 flex items-center justify-center gap-2"
+                               >
+                                   <CheckCircle className="w-5 h-5" /> Complete Pickup
+                               </button>
+                           ) : (
+                               <div className="animate-fade-in-up space-y-4">
+                                   <div className="flex justify-between items-center">
+                                       <h4 className="font-bold text-gray-800">Record Weights</h4>
+                                       <div className="text-xs text-gray-500">
+                                           Rates per kg are set by Admin
+                                       </div>
+                                   </div>
+
+                                   <div className="space-y-3">
+                                       {collectionItems.map((item, idx) => (
+                                           <div key={idx} className="flex gap-2 items-center">
+                                               <div className="flex-1 bg-gray-50 rounded-xl px-3 py-2 border border-gray-200">
+                                                   <p className="text-xs font-bold text-gray-500 uppercase">{item.category}</p>
+                                                   <p className="text-xs text-green-600">{item.rate} Z/kg</p>
+                                               </div>
+                                               <div className="relative w-24">
+                                                   <input 
+                                                      type="number"
+                                                      placeholder="0"
+                                                      value={item.weight || ''}
+                                                      onChange={(e) => handleWeightChange(idx, e.target.value)}
+                                                      className="w-full p-2 pr-8 rounded-xl border border-gray-300 focus:outline-none focus:border-green-500 text-right font-bold"
+                                                   />
+                                                   <span className="absolute right-3 top-2.5 text-xs text-gray-400">kg</span>
+                                               </div>
+                                               <button onClick={() => removeItemRow(idx)} className="p-2 text-red-400 hover:text-red-600">
+                                                   <Trash2 className="w-4 h-4" />
+                                               </button>
+                                           </div>
+                                       ))}
+                                       
+                                       <button onClick={addNewItemRow} className="text-xs font-bold text-green-600 flex items-center gap-1 hover:underline">
+                                           <Plus className="w-3 h-3" /> Add Item
+                                       </button>
+                                   </div>
+
+                                   <div className="bg-green-50 p-4 rounded-2xl border border-green-200 flex justify-between items-center">
+                                       <div>
+                                           <p className="text-xs font-bold text-green-800 uppercase">Total Earned</p>
+                                           <p className="text-2xl font-bold text-green-700">{getTotalStats().earned} Z</p>
+                                       </div>
+                                       <div className="text-right">
+                                           <p className="text-xs font-bold text-green-800 uppercase">Total Weight</p>
+                                           <p className="text-lg font-bold text-green-700">{getTotalStats().weight} kg</p>
+                                       </div>
+                                   </div>
+
+                                   <button 
+                                       onClick={confirmCompletion}
+                                       className="w-full bg-green-700 text-white py-3 rounded-xl font-bold shadow-md hover:bg-green-800 transition-colors flex items-center justify-center gap-2"
+                                   >
+                                       <Coins className="w-4 h-4" /> Confirm Collection
+                                   </button>
+                               </div>
+                           )
+                       ) : (
+                           <div className="w-full bg-gray-100 text-gray-500 py-4 rounded-2xl text-center space-y-3">
+                               <div className="flex items-center justify-center gap-2 font-bold">
+                                   <CheckCircle className="w-5 h-5" /> Pickup Completed
+                               </div>
+                               
+                               {/* Breakdown Summary for Completed Task */}
+                               {selectedTask.collectionDetails && (
+                                   <div className="px-4 text-xs">
+                                       <div className="grid grid-cols-2 gap-2 text-left mb-2">
+                                           {selectedTask.collectionDetails.map((item, i) => (
+                                               <div key={i} className="flex justify-between border-b border-gray-200 pb-1">
+                                                   <span>{item.category}</span>
+                                                   <span className="font-bold">{item.weight} kg</span>
+                                               </div>
+                                           ))}
+                                       </div>
+                                       <div className="flex justify-between pt-2 font-bold text-gray-700 border-t border-gray-300">
+                                           <span>Total: {selectedTask.weight} kg</span>
+                                           <span className="text-green-600">+{selectedTask.earnedZoints} Z</span>
+                                       </div>
+                                   </div>
+                               )}
+                           </div>
+                       )}
+                   </div>
                </div>
            </div>
         </div>

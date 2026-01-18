@@ -218,42 +218,46 @@ const DashboardStaff: React.FC<Props> = ({ user, onLogout }) => {
         )}
       </div>
 
-      {/* Driver Assignment Modal - Unified Scroll Structure */}
+      {/* Driver Assignment Modal - FLEX COLUMN FIX */}
       {assignModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setAssignModalOpen(false)}></div>
-           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl animate-fade-in-up p-6 max-h-[85vh] overflow-y-auto">
-               <div className="flex justify-between items-center mb-4">
+           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-[85vh]">
+               {/* Sticky Header */}
+               <div className="flex justify-between items-center p-6 border-b border-gray-100 shrink-0">
                    <h3 className="font-bold text-gray-900">Assign Driver</h3>
-                   <button onClick={() => setAssignModalOpen(false)} className="p-2 bg-gray-100 rounded-full">
+                   <button onClick={() => setAssignModalOpen(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors">
                        <X className="w-5 h-5 text-gray-600" />
                    </button>
                </div>
                
-               <div className="space-y-2">
-                   {drivers.length === 0 ? (
-                       <p className="text-center text-gray-400 text-sm py-8">No active collectors found.</p>
-                   ) : (
-                       drivers.map((driver) => (
-                       <button 
-                          key={driver.id}
-                          onClick={() => confirmAssignment(driver.name)}
-                          className="w-full p-3 rounded-xl border flex items-center justify-between group transition-all bg-white border-gray-100 hover:border-green-500 hover:shadow-md"
-                       >
-                           <div className="flex items-center gap-3">
-                               <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 group-hover:bg-green-100 group-hover:text-green-700 transition-colors">
-                                   <UserIcon className="w-5 h-5" />
+               {/* Scrollable Body */}
+               <div className="overflow-y-auto p-6">
+                   <div className="space-y-2">
+                       {drivers.length === 0 ? (
+                           <p className="text-center text-gray-400 text-sm py-8">No active collectors found.</p>
+                       ) : (
+                           drivers.map((driver) => (
+                           <button 
+                              key={driver.id}
+                              onClick={() => confirmAssignment(driver.name)}
+                              className="w-full p-3 rounded-xl border flex items-center justify-between group transition-all bg-white border-gray-100 hover:border-green-500 hover:shadow-md"
+                           >
+                               <div className="flex items-center gap-3">
+                                   <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 group-hover:bg-green-100 group-hover:text-green-700 transition-colors">
+                                       <UserIcon className="w-5 h-5" />
+                                   </div>
+                                   <div className="text-left">
+                                       <p className="font-bold text-sm text-gray-800">{driver.name}</p>
+                                       <p className="text-xs text-gray-500">{driver.phone || 'No Phone'}</p>
+                                    </div>
                                </div>
-                               <div className="text-left">
-                                   <p className="font-bold text-sm text-gray-800">{driver.name}</p>
-                                   <p className="text-xs text-gray-500">{driver.phone || 'No Phone'}</p>
-                                </div>
-                           </div>
-                           <span className="text-[10px] font-bold px-2 py-1 rounded bg-green-100 text-green-700">
-                               Available
-                           </span>
-                       </button>
-                   )))}
+                               <span className="text-[10px] font-bold px-2 py-1 rounded bg-green-100 text-green-700">
+                                   Available
+                               </span>
+                           </button>
+                       )))}
+                   </div>
                </div>
            </div>
         </div>

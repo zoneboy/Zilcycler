@@ -110,15 +110,15 @@ const WalletCard: React.FC<WalletCardProps> = ({ user, balance }) => {
         </div>
       </div>
 
-      {/* Redeem Modal */}
+      {/* Redeem Modal - FLEX COLUMN FIX */}
       {showRedeemModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={resetModal}></div>
-            <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl animate-fade-in-up p-6 transition-all max-h-[85vh] overflow-y-auto">
+            <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-[85vh]">
                 
                 {/* --- SUCCESS VIEW --- */}
                 {view === 'SUCCESS' && (
-                    <div className="flex flex-col items-center py-8 animate-fade-in">
+                    <div className="p-6 flex flex-col items-center py-8 animate-fade-in">
                         <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4 text-green-600">
                              <Coins className="w-8 h-8" />
                         </div>
@@ -134,7 +134,7 @@ const WalletCard: React.FC<WalletCardProps> = ({ user, balance }) => {
 
                 {/* --- PROCESSING VIEW --- */}
                 {view === 'PROCESSING' && (
-                    <div className="flex flex-col items-center py-12 animate-fade-in">
+                    <div className="p-6 flex flex-col items-center py-12 animate-fade-in">
                         <div className="w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mb-4"></div>
                         <h3 className="text-lg font-bold text-gray-800">Processing Request...</h3>
                     </div>
@@ -142,118 +142,122 @@ const WalletCard: React.FC<WalletCardProps> = ({ user, balance }) => {
 
                 {/* --- INPUT VIEW --- */}
                 {view === 'INPUT' && (
-                    <div className="animate-fade-in">
-                        <div className="flex justify-between items-center mb-6">
+                    <>
+                        <div className="p-6 border-b border-gray-100 shrink-0 flex justify-between items-center">
                             <button onClick={() => setView('MENU')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                                 <ChevronLeft className="w-5 h-5 text-gray-600" />
                             </button>
                             <h3 className="text-lg font-bold text-gray-900">
                                 {selectedType === 'Cash' ? 'Cash Out' : 'Donate to Charity'}
                             </h3>
-                            <div className="w-9"></div> {/* Spacer for centering */}
+                            <div className="w-9"></div> {/* Spacer */}
                         </div>
 
-                        <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 mb-6">
-                            <div className="flex justify-between items-end mb-2">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Amount (Z)</label>
-                                <span className="text-xs text-gray-400">Balance: {balance.toLocaleString()}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <input 
-                                    type="number" 
-                                    value={amount}
-                                    onChange={(e) => {
-                                        setAmount(e.target.value);
-                                        setError('');
-                                    }}
-                                    placeholder="0"
-                                    className="flex-1 bg-transparent text-3xl font-bold text-gray-800 placeholder-gray-300 outline-none w-full"
-                                    autoFocus
-                                />
-                                <button 
-                                    onClick={handleMax}
-                                    className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200"
-                                >
-                                    MAX
-                                </button>
-                            </div>
-                            {error && (
-                                <div className="flex items-center gap-1 mt-2 text-red-500 text-xs font-medium animate-pulse">
-                                    <AlertCircle className="w-3 h-3" /> {error}
+                        <div className="p-6 overflow-y-auto">
+                            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 mb-6">
+                                <div className="flex justify-between items-end mb-2">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">Amount (Z)</label>
+                                    <span className="text-xs text-gray-400">Balance: {balance.toLocaleString()}</span>
                                 </div>
-                            )}
-                        </div>
-
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center text-sm p-3 border-b border-gray-100">
-                                <span className="text-gray-500">Equivalent Value</span>
-                                <span className="font-bold text-gray-800">₦{((parseFloat(amount) || 0) * ZOINTS_RATE_NAIRA).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                            </div>
-                            {selectedType === 'Cash' && (
-                                <div className="flex justify-between items-center text-sm p-3">
-                                    <span className="text-gray-500">Destination</span>
-                                    <span className="font-bold text-gray-800 flex items-center gap-1">
-                                        Bank Transfer <span className="text-xs font-normal text-gray-400">(Default)</span>
-                                    </span>
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="number" 
+                                        value={amount}
+                                        onChange={(e) => {
+                                            setAmount(e.target.value);
+                                            setError('');
+                                        }}
+                                        placeholder="0"
+                                        className="flex-1 bg-transparent text-3xl font-bold text-gray-800 placeholder-gray-300 outline-none w-full"
+                                        autoFocus
+                                    />
+                                    <button 
+                                        onClick={handleMax}
+                                        className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200"
+                                    >
+                                        MAX
+                                    </button>
                                 </div>
-                            )}
-                        </div>
+                                {error && (
+                                    <div className="flex items-center gap-1 mt-2 text-red-500 text-xs font-medium animate-pulse">
+                                        <AlertCircle className="w-3 h-3" /> {error}
+                                    </div>
+                                )}
+                            </div>
 
-                        <button 
-                            onClick={handleConfirmAmount}
-                            className="w-full bg-green-700 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-green-800 transition-transform active:scale-95 mt-6"
-                        >
-                            Confirm {selectedType === 'Cash' ? 'Withdrawal' : 'Donation'}
-                        </button>
-                    </div>
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center text-sm p-3 border-b border-gray-100">
+                                    <span className="text-gray-500">Equivalent Value</span>
+                                    <span className="font-bold text-gray-800">₦{((parseFloat(amount) || 0) * ZOINTS_RATE_NAIRA).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                                </div>
+                                {selectedType === 'Cash' && (
+                                    <div className="flex justify-between items-center text-sm p-3">
+                                        <span className="text-gray-500">Destination</span>
+                                        <span className="font-bold text-gray-800 flex items-center gap-1">
+                                            Bank Transfer <span className="text-xs font-normal text-gray-400">(Default)</span>
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <button 
+                                onClick={handleConfirmAmount}
+                                className="w-full bg-green-700 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-green-800 transition-transform active:scale-95 mt-6"
+                            >
+                                Confirm {selectedType === 'Cash' ? 'Withdrawal' : 'Donation'}
+                            </button>
+                        </div>
+                    </>
                 )}
 
                 {/* --- MENU VIEW --- */}
                 {view === 'MENU' && (
-                    <div className="animate-fade-in">
-                        <div className="flex justify-between items-center mb-6">
+                    <>
+                        <div className="p-6 border-b border-gray-100 shrink-0 flex justify-between items-center">
                             <h3 className="text-xl font-bold text-gray-900">Redeem ZOINTS</h3>
                             <button onClick={resetModal} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200">
                                 <X className="w-5 h-5 text-gray-600" />
                             </button>
                         </div>
 
-                        <div className="space-y-3">
-                            <button onClick={() => handleOptionSelect('Cash')} className="w-full flex items-center gap-4 p-4 rounded-2xl border border-gray-100 bg-green-50 hover:bg-green-100 hover:border-green-200 transition-all group text-left">
-                                <div className="w-10 h-10 rounded-full bg-green-200 text-green-700 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                    <Banknote className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h4 className="font-bold text-gray-800">Cash Out</h4>
-                                    <p className="text-xs text-gray-500">Convert ZOINTS to Naira</p>
-                                </div>
-                            </button>
-
-                            <button disabled className="w-full flex items-center gap-4 p-4 rounded-2xl border border-gray-100 bg-gray-50 opacity-70 cursor-not-allowed group text-left relative overflow-hidden">
-                                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-400 flex items-center justify-center grayscale">
-                                    <Gift className="w-5 h-5" />
-                                </div>
-                                <div className="flex-1">
-                                    <div className="flex justify-between items-center">
-                                        <h4 className="font-bold text-gray-600">Eco Goods</h4>
-                                        <span className="text-[10px] font-bold bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full uppercase tracking-wide">Coming Soon</span>
+                        <div className="p-6 overflow-y-auto">
+                            <div className="space-y-3">
+                                <button onClick={() => handleOptionSelect('Cash')} className="w-full flex items-center gap-4 p-4 rounded-2xl border border-gray-100 bg-green-50 hover:bg-green-100 hover:border-green-200 transition-all group text-left">
+                                    <div className="w-10 h-10 rounded-full bg-green-200 text-green-700 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <Banknote className="w-5 h-5" />
                                     </div>
-                                    <p className="text-xs text-gray-400">Buy sustainable products</p>
-                                </div>
-                            </button>
+                                    <div>
+                                        <h4 className="font-bold text-gray-800">Cash Out</h4>
+                                        <p className="text-xs text-gray-500">Convert ZOINTS to Naira</p>
+                                    </div>
+                                </button>
 
-                            <button onClick={() => handleOptionSelect('Charity')} className="w-full flex items-center gap-4 p-4 rounded-2xl border border-gray-100 bg-rose-50 hover:bg-rose-100 hover:border-rose-200 transition-all group text-left">
-                                <div className="w-10 h-10 rounded-full bg-rose-200 text-rose-700 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                    <Heart className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h4 className="font-bold text-gray-800">Donate</h4>
-                                    <p className="text-xs text-gray-500">Support environmental causes</p>
-                                </div>
-                            </button>
+                                <button disabled className="w-full flex items-center gap-4 p-4 rounded-2xl border border-gray-100 bg-gray-50 opacity-70 cursor-not-allowed group text-left relative overflow-hidden">
+                                    <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-400 flex items-center justify-center grayscale">
+                                        <Gift className="w-5 h-5" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex justify-between items-center">
+                                            <h4 className="font-bold text-gray-600">Eco Goods</h4>
+                                            <span className="text-[10px] font-bold bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full uppercase tracking-wide">Coming Soon</span>
+                                        </div>
+                                        <p className="text-xs text-gray-400">Buy sustainable products</p>
+                                    </div>
+                                </button>
+
+                                <button onClick={() => handleOptionSelect('Charity')} className="w-full flex items-center gap-4 p-4 rounded-2xl border border-gray-100 bg-rose-50 hover:bg-rose-100 hover:border-rose-200 transition-all group text-left">
+                                    <div className="w-10 h-10 rounded-full bg-rose-200 text-rose-700 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <Heart className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-gray-800">Donate</h4>
+                                        <p className="text-xs text-gray-500">Support environmental causes</p>
+                                    </div>
+                                </button>
+                            </div>
+                            <p className="text-center text-xs text-gray-400 mt-6">Minimum redemption: 500 Z</p>
                         </div>
-                        <p className="text-center text-xs text-gray-400 mt-6">Minimum redemption: 500 Z</p>
-                    </div>
+                    </>
                 )}
             </div>
         </div>

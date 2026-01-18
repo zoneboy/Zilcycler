@@ -228,33 +228,37 @@ const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
         </div>
       )}
 
-      {/* Breakdown Modal */}
+      {/* Breakdown Modal - FLEX COLUMN FIX */}
       {showBreakdown && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
            {/* Backdrop */}
            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowBreakdown(false)}></div>
            
            {/* Content */}
-           <div className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up transition-colors max-h-[85vh] overflow-y-auto p-6">
-              <div className="flex justify-between items-center mb-6">
+           <div className="bg-white dark:bg-gray-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl relative z-10 flex flex-col max-h-[85vh] animate-fade-in-up">
+              {/* Sticky Header */}
+              <div className="flex justify-between items-center p-6 border-b border-gray-100 dark:border-gray-800 shrink-0">
                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">Your Impact</h2>
                  <button onClick={() => setShowBreakdown(false)} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                     <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                  </button>
               </div>
 
-              <div className="space-y-3">
-                 {currentBreakdown.map((item) => (
-                    <div key={item.category} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
-                        <span className="text-gray-600 dark:text-gray-300 font-medium">{item.category}</span>
-                        <span className="text-green-700 dark:text-green-400 font-bold">{item.weight.toFixed(1)} kg</span>
-                    </div>
-                 ))}
-                 
-                 <div className="flex justify-between items-center p-3 mt-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-900/30">
-                    <span className="text-green-800 dark:text-green-300 font-bold">Total Recycled</span>
-                    <span className="text-green-800 dark:text-green-300 font-bold text-lg">{displayRecycled.toFixed(1)} kg</span>
-                 </div>
+              {/* Scrollable Body */}
+              <div className="p-6 overflow-y-auto">
+                  <div className="space-y-3">
+                     {currentBreakdown.map((item) => (
+                        <div key={item.category} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+                            <span className="text-gray-600 dark:text-gray-300 font-medium">{item.category}</span>
+                            <span className="text-green-700 dark:text-green-400 font-bold">{item.weight.toFixed(1)} kg</span>
+                        </div>
+                     ))}
+                     
+                     <div className="flex justify-between items-center p-3 mt-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-900/30">
+                        <span className="text-green-800 dark:text-green-300 font-bold">Total Recycled</span>
+                        <span className="text-green-800 dark:text-green-300 font-bold text-lg">{displayRecycled.toFixed(1)} kg</span>
+                     </div>
+                  </div>
               </div>
            </div>
         </div>

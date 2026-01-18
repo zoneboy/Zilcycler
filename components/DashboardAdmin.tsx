@@ -1022,12 +1022,13 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                })}
            </div>
 
-           {/* User Detail Modal */}
+           {/* User Detail Modal - FLEX COLUMN FIX */}
            {selectedUser && (
-              <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+              <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
                   <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedUser(null)}></div>
-                  <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg relative z-10 shadow-2xl animate-fade-in-up p-6 max-h-[85vh] overflow-y-auto">
-                      <div className="flex justify-between items-start mb-6">
+                  <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-[85vh]">
+                      {/* Sticky Header */}
+                      <div className="flex justify-between items-start p-6 border-b border-gray-100 shrink-0">
                           <div className="flex items-center gap-4">
                               <img src={selectedUser.avatar || `https://ui-avatars.com/api/?name=${selectedUser.name}`} className="w-16 h-16 rounded-full border-4 border-gray-50" />
                               <div>
@@ -1044,85 +1045,93 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                           </button>
                       </div>
 
-                      {/* Detail Grid */}
-                      <div className="grid grid-cols-2 gap-4 mb-6">
-                           <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                               <p className="text-xs text-gray-400 uppercase font-bold">Phone</p>
-                               <p className="font-medium text-gray-800">{selectedUser.phone || 'N/A'}</p>
-                           </div>
-                           <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                               <p className="text-xs text-gray-400 uppercase font-bold">Gender</p>
-                               <p className="font-medium text-gray-800">{selectedUser.gender || 'N/A'}</p>
-                           </div>
-                           <div className="col-span-2 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                               <p className="text-xs text-gray-400 uppercase font-bold">Address</p>
-                               <p className="font-medium text-gray-800">{selectedUser.address || 'N/A'}</p>
-                           </div>
-                           {selectedUser.bankDetails && (
-                               <div className="col-span-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                                   <p className="text-xs text-blue-400 uppercase font-bold mb-1 flex items-center gap-1"><Landmark className="w-3 h-3"/> Bank Account</p>
-                                   <p className="font-bold text-blue-900">{selectedUser.bankDetails.bankName}</p>
-                                   <p className="text-sm text-blue-800">{selectedUser.bankDetails.accountNumber} • {selectedUser.bankDetails.accountName}</p>
+                      {/* Scrollable Body */}
+                      <div className="overflow-y-auto p-6">
+                          {/* Detail Grid */}
+                          <div className="grid grid-cols-2 gap-4 mb-6">
+                               <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                   <p className="text-xs text-gray-400 uppercase font-bold">Phone</p>
+                                   <p className="font-medium text-gray-800">{selectedUser.phone || 'N/A'}</p>
                                </div>
-                           )}
-                      </div>
-
-                      {/* User Stats Chart */}
-                      <div className="mb-6">
-                           <h4 className="font-bold text-gray-800 mb-3">Recycling Breakdown</h4>
-                           <div className="h-48">
-                               {getUserStats(selectedUser).totalWeight > 0 ? (
-                                   <ResponsiveContainer width="100%" height="100%">
-                                       <PieChart>
-                                           <Pie 
-                                             data={getUserStats(selectedUser).compositionData} 
-                                             dataKey="value" 
-                                             nameKey="name" 
-                                             cx="50%" cy="50%" 
-                                             innerRadius={40} 
-                                             outerRadius={60}
-                                           >
-                                               {getUserStats(selectedUser).compositionData.map((entry, index) => (
-                                                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                               ))}
-                                           </Pie>
-                                           <Tooltip />
-                                           <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                                       </PieChart>
-                                   </ResponsiveContainer>
-                               ) : (
-                                   <div className="h-full flex items-center justify-center text-gray-400 text-sm border-2 border-dashed border-gray-100 rounded-xl">No recycling data</div>
+                               <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                   <p className="text-xs text-gray-400 uppercase font-bold">Gender</p>
+                                   <p className="font-medium text-gray-800">{selectedUser.gender || 'N/A'}</p>
+                               </div>
+                               <div className="col-span-2 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                   <p className="text-xs text-gray-400 uppercase font-bold">Address</p>
+                                   <p className="font-medium text-gray-800">{selectedUser.address || 'N/A'}</p>
+                               </div>
+                               {selectedUser.bankDetails && (
+                                   <div className="col-span-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                                       <p className="text-xs text-blue-400 uppercase font-bold mb-1 flex items-center gap-1"><Landmark className="w-3 h-3"/> Bank Account</p>
+                                       <p className="font-bold text-blue-900">{selectedUser.bankDetails.bankName}</p>
+                                       <p className="text-sm text-blue-800">{selectedUser.bankDetails.accountNumber} • {selectedUser.bankDetails.accountName}</p>
+                                   </div>
                                )}
-                           </div>
-                      </div>
+                          </div>
 
-                      {/* Actions */}
-                      <button 
-                         onClick={(e) => { toggleUserStatus(selectedUser.id, e); setSelectedUser(null); }}
-                         className={`w-full py-3 rounded-xl font-bold text-white transition-colors flex items-center justify-center gap-2 ${selectedUser.isActive ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700'}`}
-                      >
-                          {selectedUser.isActive ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-                          {selectedUser.isActive ? 'Suspend Account' : 'Activate Account'}
-                      </button>
+                          {/* User Stats Chart */}
+                          <div className="mb-6">
+                               <h4 className="font-bold text-gray-800 mb-3">Recycling Breakdown</h4>
+                               <div className="h-48">
+                                   {getUserStats(selectedUser).totalWeight > 0 ? (
+                                       <ResponsiveContainer width="100%" height="100%">
+                                           <PieChart>
+                                               <Pie 
+                                                 data={getUserStats(selectedUser).compositionData} 
+                                                 dataKey="value" 
+                                                 nameKey="name" 
+                                                 cx="50%" cy="50%" 
+                                                 innerRadius={40} 
+                                                 outerRadius={60}
+                                               >
+                                                   {getUserStats(selectedUser).compositionData.map((entry, index) => (
+                                                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                   ))}
+                                               </Pie>
+                                               <Tooltip />
+                                               <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                                           </PieChart>
+                                       </ResponsiveContainer>
+                                   ) : (
+                                       <div className="h-full flex items-center justify-center text-gray-400 text-sm border-2 border-dashed border-gray-100 rounded-xl">No recycling data</div>
+                                   )}
+                               </div>
+                          </div>
+
+                          {/* Actions */}
+                          <button 
+                             onClick={(e) => { toggleUserStatus(selectedUser.id, e); setSelectedUser(null); }}
+                             className={`w-full py-3 rounded-xl font-bold text-white transition-colors flex items-center justify-center gap-2 ${selectedUser.isActive ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700'}`}
+                          >
+                              {selectedUser.isActive ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                              {selectedUser.isActive ? 'Suspend Account' : 'Activate Account'}
+                          </button>
+                      </div>
                   </div>
               </div>
            )}
 
-           {/* Add User Modal */}
+           {/* Add User Modal - FLEX COLUMN FIX */}
            {isAddUserOpen && (
-               <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+               <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsAddUserOpen(false)}></div>
-                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
-                       <h3 className="text-lg font-bold text-gray-900 mb-4">Add {addingRole === UserRole.COLLECTOR ? 'Collector' : 'Staff'}</h3>
-                       <form onSubmit={handleAddUser} className="space-y-3">
-                           <input type="text" placeholder="Full Name" required className="w-full p-3 bg-gray-50 border rounded-xl" value={newUserForm.name} onChange={e => setNewUserForm({...newUserForm, name: e.target.value})} />
-                           <input type="email" placeholder="Email Address" required className="w-full p-3 bg-gray-50 border rounded-xl" value={newUserForm.email} onChange={e => setNewUserForm({...newUserForm, email: e.target.value})} />
-                           <input type="tel" placeholder="Phone" required className="w-full p-3 bg-gray-50 border rounded-xl" value={newUserForm.phone} onChange={e => setNewUserForm({...newUserForm, phone: e.target.value})} />
-                           <input type="password" placeholder="Create Password" required className="w-full p-3 bg-gray-50 border rounded-xl" value={newUserForm.password} onChange={e => setNewUserForm({...newUserForm, password: e.target.value})} />
-                           
-                           <button type="submit" className="w-full bg-green-700 text-white py-3 rounded-xl font-bold mt-2 hover:bg-green-800">Create Account</button>
-                       </form>
-                       <button onClick={() => setIsAddUserOpen(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
+                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl flex flex-col max-h-[85vh]">
+                       <div className="p-6 border-b border-gray-100 shrink-0 flex justify-between items-center">
+                           <h3 className="text-lg font-bold text-gray-900">Add {addingRole === UserRole.COLLECTOR ? 'Collector' : 'Staff'}</h3>
+                           <button onClick={() => setIsAddUserOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
+                       </div>
+                       
+                       <div className="overflow-y-auto p-6">
+                           <form onSubmit={handleAddUser} className="space-y-3">
+                               <input type="text" placeholder="Full Name" required className="w-full p-3 bg-gray-50 border rounded-xl" value={newUserForm.name} onChange={e => setNewUserForm({...newUserForm, name: e.target.value})} />
+                               <input type="email" placeholder="Email Address" required className="w-full p-3 bg-gray-50 border rounded-xl" value={newUserForm.email} onChange={e => setNewUserForm({...newUserForm, email: e.target.value})} />
+                               <input type="tel" placeholder="Phone" required className="w-full p-3 bg-gray-50 border rounded-xl" value={newUserForm.phone} onChange={e => setNewUserForm({...newUserForm, phone: e.target.value})} />
+                               <input type="password" placeholder="Create Password" required className="w-full p-3 bg-gray-50 border rounded-xl" value={newUserForm.password} onChange={e => setNewUserForm({...newUserForm, password: e.target.value})} />
+                               
+                               <button type="submit" className="w-full bg-green-700 text-white py-3 rounded-xl font-bold mt-2 hover:bg-green-800">Create Account</button>
+                           </form>
+                       </div>
                    </div>
                </div>
            )}
@@ -1233,62 +1242,66 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                 )}
             </div>
 
-            {/* Pickup Detail Modal */}
+            {/* Pickup Detail Modal - FLEX COLUMN FIX */}
             {selectedPickup && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+                <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
                   <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedPickup(null)}></div>
-                  <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
-                      <div className="flex justify-between items-center mb-6">
+                  <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl flex flex-col max-h-[85vh] animate-fade-in-up">
+                      {/* Sticky Header */}
+                      <div className="flex justify-between items-center p-6 border-b border-gray-100 shrink-0">
                           <h3 className="font-bold text-lg text-gray-900">Pickup Details</h3>
                           <button onClick={() => setSelectedPickup(null)}><X className="w-5 h-5 text-gray-500" /></button>
                       </div>
 
-                      {/* Image */}
-                      {selectedPickup.wasteImage && (
-                          <div className="mb-4 rounded-xl overflow-hidden border border-gray-200">
-                              <img src={selectedPickup.wasteImage} className="w-full h-48 object-cover" />
-                          </div>
-                      )}
-
-                      <div className="space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
-                              <div className="p-3 bg-gray-50 rounded-xl">
-                                  <span className="text-xs text-gray-400 font-bold uppercase">Status</span>
-                                  <p className={`font-bold ${selectedPickup.status === 'Completed' ? 'text-green-600' : 'text-gray-800'}`}>{selectedPickup.status}</p>
-                              </div>
-                              <div className="p-3 bg-gray-50 rounded-xl">
-                                  <span className="text-xs text-gray-400 font-bold uppercase">Date</span>
-                                  <p className="font-bold text-gray-800">{selectedPickup.date}</p>
-                              </div>
-                          </div>
-                          
-                          <div className="p-3 bg-gray-50 rounded-xl">
-                              <span className="text-xs text-gray-400 font-bold uppercase">Location</span>
-                              <p className="font-medium text-gray-800 text-sm">{selectedPickup.location}</p>
-                          </div>
-
-                          <div className="p-3 bg-gray-50 rounded-xl">
-                              <span className="text-xs text-gray-400 font-bold uppercase">Items</span>
-                              <p className="font-medium text-gray-800 text-sm">{selectedPickup.items}</p>
-                          </div>
-
-                          {selectedPickup.collectionDetails && (
-                              <div className="border border-green-100 bg-green-50/50 rounded-xl p-3">
-                                  <span className="text-xs text-green-700 font-bold uppercase mb-2 block">Collection Breakdown</span>
-                                  <div className="space-y-1">
-                                      {selectedPickup.collectionDetails.map((d, i) => (
-                                          <div key={i} className="flex justify-between text-sm">
-                                              <span className="text-gray-600">{d.category}</span>
-                                              <span className="font-bold text-gray-800">{d.weight} kg</span>
-                                          </div>
-                                      ))}
-                                      <div className="border-t border-green-200 pt-1 mt-1 flex justify-between font-bold text-green-800">
-                                          <span>Total</span>
-                                          <span>{selectedPickup.earnedZoints} Z</span>
-                                      </div>
-                                  </div>
+                      {/* Scrollable Body */}
+                      <div className="overflow-y-auto p-6">
+                          {/* Image */}
+                          {selectedPickup.wasteImage && (
+                              <div className="mb-4 rounded-xl overflow-hidden border border-gray-200">
+                                  <img src={selectedPickup.wasteImage} className="w-full h-48 object-cover" />
                               </div>
                           )}
+
+                          <div className="space-y-4">
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div className="p-3 bg-gray-50 rounded-xl">
+                                      <span className="text-xs text-gray-400 font-bold uppercase">Status</span>
+                                      <p className={`font-bold ${selectedPickup.status === 'Completed' ? 'text-green-600' : 'text-gray-800'}`}>{selectedPickup.status}</p>
+                                  </div>
+                                  <div className="p-3 bg-gray-50 rounded-xl">
+                                      <span className="text-xs text-gray-400 font-bold uppercase">Date</span>
+                                      <p className="font-bold text-gray-800">{selectedPickup.date}</p>
+                                  </div>
+                              </div>
+                              
+                              <div className="p-3 bg-gray-50 rounded-xl">
+                                  <span className="text-xs text-gray-400 font-bold uppercase">Location</span>
+                                  <p className="font-medium text-gray-800 text-sm">{selectedPickup.location}</p>
+                              </div>
+
+                              <div className="p-3 bg-gray-50 rounded-xl">
+                                  <span className="text-xs text-gray-400 font-bold uppercase">Items</span>
+                                  <p className="font-medium text-gray-800 text-sm">{selectedPickup.items}</p>
+                              </div>
+
+                              {selectedPickup.collectionDetails && (
+                                  <div className="border border-green-100 bg-green-50/50 rounded-xl p-3">
+                                      <span className="text-xs text-green-700 font-bold uppercase mb-2 block">Collection Breakdown</span>
+                                      <div className="space-y-1">
+                                          {selectedPickup.collectionDetails.map((d, i) => (
+                                              <div key={i} className="flex justify-between text-sm">
+                                                  <span className="text-gray-600">{d.category}</span>
+                                                  <span className="font-bold text-gray-800">{d.weight} kg</span>
+                                              </div>
+                                          ))}
+                                          <div className="border-t border-green-200 pt-1 mt-1 flex justify-between font-bold text-green-800">
+                                              <span>Total</span>
+                                              <span>{selectedPickup.earnedZoints} Z</span>
+                                          </div>
+                                      </div>
+                                  </div>
+                              )}
+                          </div>
                       </div>
                   </div>
                 </div>
@@ -1376,27 +1389,32 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                ))}
            </div>
 
-           {/* Add Tip Modal */}
+           {/* Add Tip Modal - FLEX COLUMN FIX */}
            {isAddTipOpen && (
-               <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+               <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsAddTipOpen(false)}></div>
-                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
-                       <h3 className="text-lg font-bold text-gray-900 mb-4">Add New Tip</h3>
-                       <form onSubmit={handleAddTip} className="space-y-3">
-                           <input type="text" placeholder="Title" required className="w-full p-3 bg-gray-50 border rounded-xl text-sm" value={newTip.title} onChange={e => setNewTip({...newTip, title: e.target.value})} />
-                           <select className="w-full p-3 bg-gray-50 border rounded-xl text-sm" value={newTip.category} onChange={e => setNewTip({...newTip, category: e.target.value})}>
-                               <option>Tips</option>
-                               <option>News</option>
-                               <option>Guide</option>
-                           </select>
-                           <textarea rows={3} placeholder="Excerpt/Content" required className="w-full p-3 bg-gray-50 border rounded-xl text-sm resize-none" value={newTip.excerpt} onChange={e => setNewTip({...newTip, excerpt: e.target.value})} />
-                           <div className="relative">
-                               <input type="text" placeholder="Image URL (Optional)" className="w-full p-3 bg-gray-50 border rounded-xl text-sm pl-10" value={newTip.image} onChange={e => setNewTip({...newTip, image: e.target.value})} />
-                               <ImageIcon2 className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-                           </div>
-                           <button type="submit" className="w-full bg-green-700 text-white py-3 rounded-xl font-bold mt-2 hover:bg-green-800">Publish Post</button>
-                       </form>
-                       <button onClick={() => setIsAddTipOpen(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
+                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl flex flex-col max-h-[85vh]">
+                       <div className="p-6 border-b border-gray-100 shrink-0 flex justify-between items-center">
+                           <h3 className="text-lg font-bold text-gray-900">Add New Tip</h3>
+                           <button onClick={() => setIsAddTipOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
+                       </div>
+                       
+                       <div className="overflow-y-auto p-6">
+                           <form onSubmit={handleAddTip} className="space-y-3">
+                               <input type="text" placeholder="Title" required className="w-full p-3 bg-gray-50 border rounded-xl text-sm" value={newTip.title} onChange={e => setNewTip({...newTip, title: e.target.value})} />
+                               <select className="w-full p-3 bg-gray-50 border rounded-xl text-sm" value={newTip.category} onChange={e => setNewTip({...newTip, category: e.target.value})}>
+                                   <option>Tips</option>
+                                   <option>News</option>
+                                   <option>Guide</option>
+                               </select>
+                               <textarea rows={3} placeholder="Excerpt/Content" required className="w-full p-3 bg-gray-50 border rounded-xl text-sm resize-none" value={newTip.excerpt} onChange={e => setNewTip({...newTip, excerpt: e.target.value})} />
+                               <div className="relative">
+                                   <input type="text" placeholder="Image URL (Optional)" className="w-full p-3 bg-gray-50 border rounded-xl text-sm pl-10" value={newTip.image} onChange={e => setNewTip({...newTip, image: e.target.value})} />
+                                   <ImageIcon2 className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                               </div>
+                               <button type="submit" className="w-full bg-green-700 text-white py-3 rounded-xl font-bold mt-2 hover:bg-green-800">Publish Post</button>
+                           </form>
+                       </div>
                    </div>
                </div>
            )}
@@ -1434,54 +1452,59 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                ))}
            </div>
 
-           {/* Issue Certificate Modal */}
+           {/* Issue Certificate Modal - FLEX COLUMN FIX */}
            {isCertModalOpen && (
-               <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+               <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsCertModalOpen(false)}></div>
-                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
-                       <h3 className="text-lg font-bold text-gray-900 mb-4">Issue Certificate</h3>
-                       <form onSubmit={handleAddCertificate} className="space-y-3">
-                           <div>
-                               <label className="text-xs font-bold text-gray-500 mb-1 block">Organization</label>
-                               <select 
-                                    className="w-full p-3 bg-gray-50 border rounded-xl text-sm" 
-                                    value={certForm.orgId} 
-                                    onChange={e => setCertForm({...certForm, orgId: e.target.value})}
-                                    required
-                                >
-                                   <option value="">Select Organization</option>
-                                   {users.filter(u => u.role === UserRole.ORGANIZATION).map(org => (
-                                       <option key={org.id} value={org.id}>{org.name}</option>
-                                   ))}
-                               </select>
-                           </div>
-                           <div className="grid grid-cols-2 gap-2">
-                               <select className="w-full p-3 bg-gray-50 border rounded-xl text-sm" value={certForm.month} onChange={e => setCertForm({...certForm, month: e.target.value})}>
-                                   {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
-                                       <option key={m} value={m}>{m}</option>
-                                   ))}
-                               </select>
-                               <input type="number" className="w-full p-3 bg-gray-50 border rounded-xl text-sm" value={certForm.year} onChange={e => setCertForm({...certForm, year: e.target.value})} />
-                           </div>
-                           
-                           <div>
-                                <label className="text-xs font-bold text-gray-500 mb-1 block">Certificate URL (PDF)</label>
-                                <div className="flex gap-2">
-                                    <input 
-                                        type="text" 
-                                        placeholder="https://..." 
+                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl flex flex-col max-h-[85vh]">
+                       <div className="p-6 border-b border-gray-100 shrink-0 flex justify-between items-center">
+                           <h3 className="text-lg font-bold text-gray-900">Issue Certificate</h3>
+                           <button onClick={() => setIsCertModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
+                       </div>
+                       
+                       <div className="overflow-y-auto p-6">
+                           <form onSubmit={handleAddCertificate} className="space-y-3">
+                               <div>
+                                   <label className="text-xs font-bold text-gray-500 mb-1 block">Organization</label>
+                                   <select 
                                         className="w-full p-3 bg-gray-50 border rounded-xl text-sm" 
-                                        value={certForm.url} 
-                                        onChange={e => setCertForm({...certForm, url: e.target.value})}
-                                        required 
-                                    />
-                                    <button type="button" onClick={handleGenerateMockUrl} className="bg-gray-200 px-3 rounded-xl text-xs font-bold hover:bg-gray-300">Mock</button>
-                                </div>
-                           </div>
+                                        value={certForm.orgId} 
+                                        onChange={e => setCertForm({...certForm, orgId: e.target.value})}
+                                        required
+                                    >
+                                       <option value="">Select Organization</option>
+                                       {users.filter(u => u.role === UserRole.ORGANIZATION).map(org => (
+                                           <option key={org.id} value={org.id}>{org.name}</option>
+                                       ))}
+                                   </select>
+                               </div>
+                               <div className="grid grid-cols-2 gap-2">
+                                   <select className="w-full p-3 bg-gray-50 border rounded-xl text-sm" value={certForm.month} onChange={e => setCertForm({...certForm, month: e.target.value})}>
+                                       {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
+                                           <option key={m} value={m}>{m}</option>
+                                       ))}
+                                   </select>
+                                   <input type="number" className="w-full p-3 bg-gray-50 border rounded-xl text-sm" value={certForm.year} onChange={e => setCertForm({...certForm, year: e.target.value})} />
+                               </div>
+                               
+                               <div>
+                                    <label className="text-xs font-bold text-gray-500 mb-1 block">Certificate URL (PDF)</label>
+                                    <div className="flex gap-2">
+                                        <input 
+                                            type="text" 
+                                            placeholder="https://..." 
+                                            className="w-full p-3 bg-gray-50 border rounded-xl text-sm" 
+                                            value={certForm.url} 
+                                            onChange={e => setCertForm({...certForm, url: e.target.value})}
+                                            required 
+                                        />
+                                        <button type="button" onClick={handleGenerateMockUrl} className="bg-gray-200 px-3 rounded-xl text-xs font-bold hover:bg-gray-300">Mock</button>
+                                    </div>
+                               </div>
 
-                           <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mt-2 hover:bg-blue-700">Issue Certificate</button>
-                       </form>
-                       <button onClick={() => setIsCertModalOpen(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
+                               <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mt-2 hover:bg-blue-700">Issue Certificate</button>
+                           </form>
+                       </div>
                    </div>
                </div>
            )}

@@ -53,31 +53,37 @@ const BlogList: React.FC = () => {
         )}
       </div>
 
-      {/* Blog Detail Modal - Unified Scroll Structure */}
+      {/* Blog Detail Modal - FLEX COLUMN FIX */}
       {selectedBlog && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedBlog(null)}></div>
-              <div className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full max-w-lg relative z-10 shadow-2xl animate-fade-in-up max-h-[85vh] overflow-y-auto">
-                 <button onClick={() => setSelectedBlog(null)} className="absolute top-4 right-4 p-2 bg-white/50 dark:bg-black/50 backdrop-blur rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors z-20">
-                     <X className="w-5 h-5 text-gray-800 dark:text-white" />
-                 </button>
-                 
-                 <img src={selectedBlog.image} className="w-full h-64 object-cover" alt={selectedBlog.title} />
-                 
-                 <div className="p-6 sm:p-8">
-                     <span className="text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded-full uppercase tracking-wider mb-3 inline-block">
-                        {selectedBlog.category}
-                     </span>
-                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">{selectedBlog.title}</h2>
-                     <p className="text-gray-600 dark:text-gray-300 leading-relaxed mb-6">
-                        {selectedBlog.excerpt}
-                        <br /><br />
-                        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-                     </p>
-                     
-                     <button onClick={() => setSelectedBlog(null)} className="w-full bg-green-700 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-green-800 transition-transform active:scale-95">
-                        Close Article
+              <div className="bg-white dark:bg-gray-900 w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl relative z-10 flex flex-col max-h-[85vh] animate-fade-in-up">
+                 {/* Sticky Header with Close Button */}
+                 <div className="absolute top-4 right-4 z-20">
+                     <button onClick={() => setSelectedBlog(null)} className="p-2 bg-white/80 dark:bg-black/50 backdrop-blur rounded-full hover:bg-white dark:hover:bg-gray-800 transition-colors shadow-sm">
+                         <X className="w-5 h-5 text-gray-800 dark:text-white" />
                      </button>
+                 </div>
+                 
+                 {/* Scrollable Body */}
+                 <div className="overflow-y-auto">
+                     <img src={selectedBlog.image} className="w-full h-64 object-cover" alt={selectedBlog.title} />
+                     
+                     <div className="p-6 sm:p-8">
+                         <span className="text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded-full uppercase tracking-wider mb-3 inline-block">
+                            {selectedBlog.category}
+                         </span>
+                         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">{selectedBlog.title}</h2>
+                         <p className="text-gray-600 dark:text-gray-300 leading-relaxed mb-6">
+                            {selectedBlog.excerpt}
+                            <br /><br />
+                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                         </p>
+                         
+                         <button onClick={() => setSelectedBlog(null)} className="w-full bg-green-700 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-green-800 transition-transform active:scale-95">
+                            Close Article
+                         </button>
+                     </div>
                  </div>
               </div>
           </div>
