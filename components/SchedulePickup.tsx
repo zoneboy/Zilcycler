@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { User, PickupTask } from '../types';
-import { Calendar, Clock, Camera, MapPin, CheckCircle, Upload, Phone } from 'lucide-react';
+import { Calendar, Clock, Camera, MapPin, CheckCircle, Upload, Phone, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+
+// Access environment variables injected by Vite
+// Safely access import.meta.env to prevent runtime errors if undefined
+const env = (import.meta as any).env || ({} as any);
+const CLOUDINARY_CLOUD_NAME = env.VITE_CLOUDINARY_CLOUD_NAME; 
+const CLOUDINARY_UPLOAD_PRESET = env.VITE_CLOUDINARY_UPLOAD_PRESET; 
 
 interface SchedulePickupProps {
   user: User;
@@ -12,8 +18,13 @@ interface SchedulePickupProps {
 const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit }) => {
   const { schedulePickup } = useApp();
   const [success, setSuccess] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  
+  // File State
   const [fileName, setFileName] = useState<string | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [wasteFile, setWasteFile] = useState<File | null>(null); // Store raw file for upload
+  const [previewImage, setPreviewImage] = useState<string | undefined>(undefined); // Base64 for local preview only
+  
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   
   // Form State
@@ -32,20 +43,78 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFileName(e.target.files[0].name);
-      setImageFile(e.target.files[0]);
+      const file = e.target.files[0];
+
+      // File size validation (Max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+          alert("File is too large. Please upload an image smaller than 5MB.");
+          return;
+      }
+
+      setFileName(file.name);
+      setWasteFile(file);
+      
+      // Convert to Base64 for local preview UI only
+      const reader = new FileReader();
+      reader.onloadend = () => {
+          setPreviewImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const uploadToCloudinary = async (file: File): Promise<string | null> => {
+      // Safety check for environment variables
+      if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+          console.error("Cloudinary credentials missing. Ensure VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET are set.");
+          alert("System Configuration Error: Image upload is currently disabled. Please contact support.");
+          return null;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+      formData.append('folder', 'zilcycler_pickups'); 
+
+      try {
+          const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+              method: 'POST',
+              body: formData
+          });
+
+          if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error?.message || 'Upload failed');
+          }
+
+          const data = await response.json();
+          return data.secure_url;
+      } catch (error) {
+          console.error("Cloudinary Upload Error:", error);
+          alert("Failed to upload image. Please check your internet connection or try again.");
+          return null;
+      }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedTypes.length === 0) {
       alert("Please select at least one waste type.");
       return;
     }
 
-    // Create a local URL for the image (simulating upload)
-    const imageUrl = imageFile ? URL.createObjectURL(imageFile) : undefined;
+    setIsUploading(true);
+    let finalImageUrl = undefined;
+
+    // Upload Image if selected
+    if (wasteFile) {
+        const url = await uploadToCloudinary(wasteFile);
+        if (!url) {
+            setIsUploading(false);
+            return; // Stop if upload failed
+        }
+        finalImageUrl = url;
+    }
 
     const newTask: PickupTask = {
         id: '', // Server generated
@@ -57,12 +126,13 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
         status: 'Pending',
         contact: user.name,
         phoneNumber: phone,
-        wasteImage: imageUrl
+        wasteImage: finalImageUrl
     };
 
     // Add to Global Context
-    schedulePickup(newTask);
+    await schedulePickup(newTask);
 
+    setIsUploading(false);
     setSuccess(true);
     setTimeout(onSubmit, 2500);
   };
@@ -82,7 +152,7 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 mb-4">
-        <button onClick={onBack} className="text-gray-600 hover:text-green-700 font-medium">
+        <button onClick={onBack} disabled={isUploading} className="text-gray-600 hover:text-green-700 font-medium disabled:opacity-50">
           &larr; Back
         </button>
         <h2 className="text-xl font-bold text-gray-800">Schedule Pickup</h2>
@@ -102,6 +172,7 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
                   type="checkbox" 
                   checked={selectedTypes.includes(type)}
                   onChange={() => toggleType(type)}
+                  disabled={isUploading}
                   className="w-4 h-4 text-green-600 rounded border-gray-300 focus:ring-green-500 accent-green-600" 
                 />
                 <span className="text-sm text-gray-700">{type}</span>
@@ -120,7 +191,8 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
                 type="date" 
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full pl-10 p-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500" 
+                disabled={isUploading}
+                className="w-full pl-10 p-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-50" 
                 required 
               />
             </div>
@@ -133,7 +205,8 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
                 type="time" 
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className="w-full pl-10 p-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500" 
+                disabled={isUploading}
+                className="w-full pl-10 p-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-50" 
                 required 
               />
             </div>
@@ -150,7 +223,8 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
                   type="tel" 
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full pl-10 p-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500" 
+                  disabled={isUploading}
+                  className="w-full pl-10 p-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-50" 
                   placeholder="e.g. +234 800 000 0000" 
                   required
               />
@@ -165,7 +239,8 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
                   rows={2} 
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  className="w-full pl-10 p-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500" 
+                  disabled={isUploading}
+                  className="w-full pl-10 p-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-50" 
                   placeholder="Enter full address..." 
                   required
               ></textarea>
@@ -177,11 +252,21 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <label className="block text-sm font-medium text-gray-700 mb-2">Photo of Waste (Optional)</label>
           <div className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${fileName ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:bg-gray-50'}`}>
-            <input type="file" id="waste-image" className="hidden" accept="image/*" onChange={handleFileChange} />
-            <label htmlFor="waste-image" className="cursor-pointer flex flex-col items-center w-full h-full">
+            <input 
+                type="file" 
+                id="waste-image" 
+                className="hidden" 
+                accept="image/*" 
+                onChange={handleFileChange} 
+                disabled={isUploading}
+            />
+            <label htmlFor="waste-image" className={`cursor-pointer flex flex-col items-center w-full h-full ${isUploading ? 'pointer-events-none opacity-50' : ''}`}>
               {fileName ? (
                   <>
-                     <CheckCircle className="w-8 h-8 text-green-500 mb-2" />
+                     <div className="relative">
+                        {previewImage && <img src={previewImage} alt="Preview" className="w-20 h-20 rounded-lg object-cover mb-2 border border-green-200" />}
+                        <CheckCircle className="w-6 h-6 text-green-500 absolute -top-2 -right-2 bg-white rounded-full" />
+                     </div>
                      <span className="text-sm font-bold text-green-700 break-all">{fileName}</span>
                      <span className="text-xs text-green-600 mt-1">Tap to change</span>
                   </>
@@ -195,8 +280,18 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
           </div>
         </div>
 
-        <button type="submit" className="w-full bg-green-700 text-white py-4 rounded-2xl font-bold text-lg shadow-lg hover:bg-green-800 transition-transform active:scale-95">
-          Confirm Schedule
+        <button 
+            type="submit" 
+            disabled={isUploading}
+            className="w-full bg-green-700 text-white py-4 rounded-2xl font-bold text-lg shadow-lg hover:bg-green-800 transition-all active:scale-95 disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2"
+        >
+          {isUploading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" /> Uploading & Scheduling...
+              </>
+          ) : (
+              'Confirm Schedule'
+          )}
         </button>
       </form>
     </div>
