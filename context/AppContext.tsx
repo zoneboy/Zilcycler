@@ -32,6 +32,7 @@ interface AppContextType {
   deleteBlogPost: (id: string) => void;
   sendMessage: (msg: Message) => void;
   addCertificate: (cert: Certificate) => void;
+  refreshData: () => Promise<void>; // Exposed to trigger refresh after login
   loading: boolean;
 }
 
@@ -52,58 +53,61 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [messages, setMessages] = useState<Message[]>([]);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
 
+  // Helper to get Auth Headers
+  const getAuthHeaders = () => {
+      const token = localStorage.getItem('zilcycler_token');
+      return token ? { 'Authorization': `Bearer ${token}` } : {};
+  };
+
+  const fetchAllData = async () => {
+    try {
+        // We set loading false early for public data, but keep internal loading state if needed
+        // Fetch Public Config/Data first
+        const [configRes, blogRes, locRes, certRes] = await Promise.all([
+             fetch('/api/config'),
+             fetch('/api/blog'),
+             fetch('/api/locations'),
+             fetch('/api/certificates')
+        ]);
+
+        if (configRes.ok) {
+             const configData = await configRes.json();
+             setSysConfig(configData.sysConfig);
+             setWasteRates(configData.wasteRates);
+        }
+        if (blogRes.ok) setBlogPosts(await blogRes.json());
+        if (locRes.ok) setDropOffLocations(await locRes.json());
+        if (certRes.ok) setCertificates(await certRes.json());
+
+        // Check if we have a token for protected data
+        const token = localStorage.getItem('zilcycler_token');
+        if (token) {
+             const headers = { 'Authorization': `Bearer ${token}` };
+             
+             // Protected Endpoints
+             const [usersRes, pickupsRes, redemptionsRes, messagesRes] = await Promise.all([
+                 fetch('/api/users', { headers }),
+                 fetch('/api/pickups', { headers }),
+                 fetch('/api/redemption', { headers }),
+                 fetch('/api/messages', { headers })
+             ]);
+
+             if (usersRes.ok) setUsers(await usersRes.json());
+             if (pickupsRes.ok) setPickups(await pickupsRes.json());
+             if (redemptionsRes.ok) setRedemptionRequests(await redemptionsRes.json());
+             if (messagesRes.ok) setMessages(await messagesRes.json());
+        }
+
+    } catch (error: any) {
+        console.error("Failed to load data", error);
+        setErrorMsg(error.message);
+    } finally {
+        setLoading(false);
+    }
+  };
+
   // Initial Data Fetch
   useEffect(() => {
-    const fetchAllData = async () => {
-        try {
-            setLoading(true);
-            const endpoints = [
-              '/api/users', 
-              '/api/pickups', 
-              '/api/config', 
-              '/api/redemption', 
-              '/api/blog',
-              '/api/locations',
-              '/api/messages',
-              '/api/certificates'
-            ];
-            
-            const responses = await Promise.all(endpoints.map(ep => fetch(ep)));
-            
-            // Check for non-OK responses first
-            for (const res of responses) {
-              if (!res.ok) {
-                const text = await res.text();
-                throw new Error(`API Error (${res.status}): ${text.substring(0, 50)}`);
-              }
-            }
-
-            const usersData = await responses[0].json();
-            const pickupsData = await responses[1].json();
-            const configData = await responses[2].json();
-            const redemptionsData = await responses[3].json();
-            const blogData = await responses[4].json();
-            const locationsData = await responses[5].json();
-            const messagesData = await responses[6].json();
-            const certificatesData = await responses[7].json();
-
-            setUsers(usersData);
-            setPickups(pickupsData);
-            setSysConfig(configData.sysConfig);
-            setWasteRates(configData.wasteRates);
-            setRedemptionRequests(redemptionsData);
-            setBlogPosts(blogData);
-            setDropOffLocations(locationsData);
-            setMessages(messagesData);
-            setCertificates(certificatesData);
-        } catch (error: any) {
-            console.error("Failed to load initial data", error);
-            setErrorMsg(error.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     fetchAllData();
   }, []);
 
@@ -118,7 +122,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           throw new Error(err.error || 'Login failed');
       }
 
-      return await response.json();
+      const data = await response.json();
+      // Store token immediately so subsequent fetches work
+      localStorage.setItem('zilcycler_token', data.token);
+      
+      // Trigger data refresh to load protected data
+      await fetchAllData();
+
+      return data;
   };
 
   const verifySession = async (token: string): Promise<{ userId: string; valid: boolean }> => {
@@ -163,6 +174,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const initiateChangePassword = async (userId: string, currentPassword: string): Promise<void> => {
       const response = await fetch('/api/auth/change-password/initiate', {
           method: 'POST',
+          headers: getAuthHeaders(),
           body: JSON.stringify({ userId, currentPassword })
       });
       if (!response.ok) {
@@ -174,6 +186,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const confirmChangePassword = async (userId: string, otp: string, newPassword: string): Promise<void> => {
       const response = await fetch('/api/auth/change-password/confirm', {
           method: 'POST',
+          headers: getAuthHeaders(),
           body: JSON.stringify({ userId, otp, newPassword })
       });
       if (!response.ok) {
@@ -187,6 +200,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
         await fetch('/api/pickups', {
             method: 'POST',
+            headers: getAuthHeaders(),
             body: JSON.stringify(task)
         });
     } catch (e) {
@@ -207,6 +221,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     await fetch('/api/pickups', {
         method: 'PUT',
+        headers: getAuthHeaders(),
         body: JSON.stringify({ id, updates })
     });
   };
@@ -215,6 +230,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setWasteRates(newRates);
     await fetch('/api/rates/update', {
         method: 'POST',
+        headers: getAuthHeaders(),
         body: JSON.stringify({ rates: newRates })
     });
   };
@@ -223,6 +239,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setSysConfig(config);
     await fetch('/api/config/update', {
         method: 'POST',
+        headers: getAuthHeaders(),
         body: JSON.stringify(config)
     });
   };
@@ -231,6 +248,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setUsers((prev) => prev.map(u => (u && u.id === id) ? { ...u, ...updates } : u));
     await fetch('/api/users', {
         method: 'PUT',
+        headers: getAuthHeaders(),
         body: JSON.stringify({ id, updates })
     });
   };
@@ -239,6 +257,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Standard User Creation (Used by Admin)
     const response = await fetch('/api/users', {
         method: 'POST',
+        headers: getAuthHeaders(),
         body: JSON.stringify({ ...user, password })
     });
 
@@ -285,6 +304,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     ));
     await fetch('/api/redemption', {
         method: 'POST',
+        headers: getAuthHeaders(),
         body: JSON.stringify(req)
     });
   };
@@ -303,6 +323,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     await fetch('/api/redemption', {
         method: 'PUT',
+        headers: getAuthHeaders(),
         body: JSON.stringify({ id, status })
     });
   };
@@ -311,6 +332,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setBlogPosts(prev => [post, ...prev]);
     await fetch('/api/blog', {
         method: 'POST',
+        headers: getAuthHeaders(),
         body: JSON.stringify(post)
     });
   };
@@ -319,6 +341,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setBlogPosts(prev => prev.filter(p => p.id !== id));
     await fetch('/api/blog', {
         method: 'DELETE',
+        headers: getAuthHeaders(),
         body: JSON.stringify({ id })
     });
   };
@@ -327,6 +350,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setMessages(prev => [...prev, msg]);
       await fetch('/api/messages', {
           method: 'POST',
+          headers: getAuthHeaders(),
           body: JSON.stringify(msg)
       });
   };
@@ -335,6 +359,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setCertificates(prev => [cert, ...prev]);
       await fetch('/api/certificates', {
           method: 'POST',
+          headers: getAuthHeaders(),
           body: JSON.stringify(cert)
       });
   };
@@ -371,7 +396,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }
 
   return (
-    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, certificates, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, registerUser, sendSignupVerification, login, verifySession, requestPasswordReset, resetPassword, initiateChangePassword, confirmChangePassword, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost, addCertificate }}>
+    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, certificates, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, registerUser, sendSignupVerification, login, verifySession, requestPasswordReset, resetPassword, initiateChangePassword, confirmChangePassword, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost, addCertificate, refreshData: fetchAllData }}>
       {children}
     </AppContext.Provider>
   );
