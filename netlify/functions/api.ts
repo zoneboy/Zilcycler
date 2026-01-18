@@ -355,8 +355,16 @@ export const handler = async (event: any) => {
     // USERS
     if (cleanPath === 'users') {
       if (method === 'GET') {
-        if (!isAdminOrStaff) return response(403, { error: "Access denied" });
-        const { rows } = await query('SELECT id, name, email, role, phone, avatar, zoints_balance, total_recycled_kg, is_active, gender, address, industry, esg_score, bank_name, account_number, account_name, created_at FROM users');
+        let queryText = 'SELECT id, name, email, role, phone, avatar, zoints_balance, total_recycled_kg, is_active, gender, address, industry, esg_score, bank_name, account_number, account_name, created_at FROM users';
+        const params: any[] = [];
+
+        // RBAC: Admin/Staff see all. Others see themselves OR people they've chatted with (for message history context).
+        if (!isAdminOrStaff) {
+             queryText += ' WHERE id = $1 OR id IN (SELECT sender_id FROM messages WHERE receiver_id = $1) OR id IN (SELECT receiver_id FROM messages WHERE sender_id = $1)';
+             params.push(user.userId);
+        }
+
+        const { rows } = await query(queryText, params);
         const formattedUsers = rows.map((u: any) => ({
             ...u,
             zointsBalance: parseFloat(u.zoints_balance),
