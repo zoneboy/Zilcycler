@@ -2,6 +2,8 @@ import { query } from './db';
 import crypto, { randomUUID } from 'crypto';
 import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
 
 // Helper for standard response
 const response = (statusCode: number, body: any) => ({
@@ -41,6 +43,20 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+// Configure Rate Limiter (Upstash Redis)
+// Falls back to no-op if env vars are missing to allow dev without crashing, 
+// but logs warning. In production, these should be set.
+let ratelimit: Ratelimit | null = null;
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    ratelimit = new Ratelimit({
+        redis: Redis.fromEnv(),
+        limiter: Ratelimit.slidingWindow(5, '1 m'), // 5 requests per minute
+        analytics: true,
+    });
+} else {
+    console.warn("WARNING: Upstash Redis credentials not found. Rate limiting is disabled.");
+}
+
 // Password Utils
 const hashPassword = (password: string) => {
     const salt = crypto.randomBytes(16).toString('hex');
@@ -71,8 +87,16 @@ export const handler = async (event: any) => {
 
   // Helper to check if user is admin or staff
   const isAdminOrStaff = user && (user.role === 'ADMIN' || user.role === 'STAFF');
+  const clientIp = event.headers['x-forwarded-for']?.split(',')[0] || event.headers['client-ip'] || 'unknown';
 
-  console.log(`[API] ${method} /${cleanPath} [User: ${user ? user.role : 'Guest'}]`);
+  console.log(`[API] ${method} /${cleanPath} [User: ${user ? user.role : 'Guest'}] [IP: ${clientIp}]`);
+
+  // Rate Limit Check Helper
+  const checkRateLimit = async (identifier: string) => {
+      if (!ratelimit) return true; // Fail open if config missing
+      const { success } = await ratelimit.limit(identifier);
+      return success;
+  };
 
   try {
     if (cleanPath === '' || cleanPath === 'health') {
@@ -81,6 +105,10 @@ export const handler = async (event: any) => {
 
     // --- PUBLIC AUTH ROUTES ---
     if (cleanPath === 'auth/login' && method === 'POST') {
+        if (!(await checkRateLimit(`login:${clientIp}`))) {
+            return response(429, { error: 'Too many login attempts. Please try again later.' });
+        }
+
         const { email, password } = body;
         
         const { rows } = await query('SELECT * FROM users WHERE email = $1', [email]);
@@ -134,6 +162,10 @@ export const handler = async (event: any) => {
     }
 
     if (cleanPath === 'auth/send-verification' && method === 'POST') {
+        if (!(await checkRateLimit(`send_verif:${clientIp}`))) {
+            return response(429, { error: 'Too many verification requests. Please wait.' });
+        }
+
         // Check if registrations are allowed
         const configCheck = await query('SELECT allow_registrations FROM system_config WHERE id = 1');
         if (!configCheck.rows[0]?.allow_registrations) {
@@ -168,6 +200,10 @@ export const handler = async (event: any) => {
     }
 
     if (cleanPath === 'auth/register' && method === 'POST') {
+        if (!(await checkRateLimit(`register:${clientIp}`))) {
+            return response(429, { error: 'Too many registration attempts.' });
+        }
+
         // Double check registration config
         const configCheck = await query('SELECT allow_registrations FROM system_config WHERE id = 1');
         if (!configCheck.rows[0]?.allow_registrations) {
@@ -193,6 +229,10 @@ export const handler = async (event: any) => {
     }
 
     if (cleanPath === 'auth/forgot-password' && method === 'POST') {
+        if (!(await checkRateLimit(`forgot_pw:${clientIp}`))) {
+            return response(429, { error: 'Too many requests. Please wait.' });
+        }
+
         const { email } = body;
         const { rows } = await query('SELECT id FROM users WHERE email = $1', [email]);
         if (rows.length === 0) return response(404, { error: "User not found" });
@@ -206,6 +246,10 @@ export const handler = async (event: any) => {
     }
 
     if (cleanPath === 'auth/reset-password' && method === 'POST') {
+        if (!(await checkRateLimit(`reset_pw:${clientIp}`))) {
+            return response(429, { error: 'Too many attempts.' });
+        }
+
         const { email, otp, newPassword } = body;
         const { rows } = await query('SELECT * FROM password_resets WHERE email = $1', [email]);
         if (rows.length === 0 || rows[0].otp !== otp) return response(400, { error: "Invalid code" });
@@ -224,6 +268,10 @@ export const handler = async (event: any) => {
     // Change Password
     if (cleanPath.startsWith('auth/change-password')) {
         if (cleanPath === 'auth/change-password/initiate' && method === 'POST') {
+            if (!(await checkRateLimit(`chg_pw_init:${user.userId}`))) {
+                return response(429, { error: 'Too many requests.' });
+            }
+
             const { userId, currentPassword } = body;
             if (user.userId !== userId) return response(403, { error: "Forbidden" });
 
@@ -237,6 +285,10 @@ export const handler = async (event: any) => {
         }
 
         if (cleanPath === 'auth/change-password/confirm' && method === 'POST') {
+            if (!(await checkRateLimit(`chg_pw_conf:${user.userId}`))) {
+                return response(429, { error: 'Too many attempts.' });
+            }
+
             const { userId, otp, newPassword } = body;
             if (user.userId !== userId) return response(403, { error: "Forbidden" });
             
