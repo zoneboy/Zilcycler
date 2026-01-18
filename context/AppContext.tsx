@@ -61,13 +61,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const fetchAllData = async () => {
     try {
-        // We set loading false early for public data, but keep internal loading state if needed
-        // Fetch Public Config/Data first
-        const [configRes, blogRes, locRes, certRes] = await Promise.all([
-             fetch('/api/config'),
-             fetch('/api/blog'),
-             fetch('/api/locations'),
-             fetch('/api/certificates')
+        const token = localStorage.getItem('zilcycler_token');
+        if (!token) {
+            // If no token, we can't fetch protected data (which is now everything)
+            setLoading(false);
+            return;
+        }
+
+        const headers = { 'Authorization': `Bearer ${token}` };
+
+        // Fetch All Protected Data
+        const [configRes, blogRes, locRes, certRes, usersRes, pickupsRes, redemptionsRes, messagesRes] = await Promise.all([
+             fetch('/api/config', { headers }),
+             fetch('/api/blog', { headers }),
+             fetch('/api/locations', { headers }),
+             fetch('/api/certificates', { headers }),
+             fetch('/api/users', { headers }),
+             fetch('/api/pickups', { headers }),
+             fetch('/api/redemption', { headers }),
+             fetch('/api/messages', { headers })
         ]);
 
         if (configRes.ok) {
@@ -78,25 +90,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (blogRes.ok) setBlogPosts(await blogRes.json());
         if (locRes.ok) setDropOffLocations(await locRes.json());
         if (certRes.ok) setCertificates(await certRes.json());
-
-        // Check if we have a token for protected data
-        const token = localStorage.getItem('zilcycler_token');
-        if (token) {
-             const headers = { 'Authorization': `Bearer ${token}` };
-             
-             // Protected Endpoints
-             const [usersRes, pickupsRes, redemptionsRes, messagesRes] = await Promise.all([
-                 fetch('/api/users', { headers }),
-                 fetch('/api/pickups', { headers }),
-                 fetch('/api/redemption', { headers }),
-                 fetch('/api/messages', { headers })
-             ]);
-
-             if (usersRes.ok) setUsers(await usersRes.json());
-             if (pickupsRes.ok) setPickups(await pickupsRes.json());
-             if (redemptionsRes.ok) setRedemptionRequests(await redemptionsRes.json());
-             if (messagesRes.ok) setMessages(await messagesRes.json());
-        }
+        if (usersRes.ok) setUsers(await usersRes.json());
+        if (pickupsRes.ok) setPickups(await pickupsRes.json());
+        if (redemptionsRes.ok) setRedemptionRequests(await redemptionsRes.json());
+        if (messagesRes.ok) setMessages(await messagesRes.json());
 
     } catch (error: any) {
         console.error("Failed to load data", error);

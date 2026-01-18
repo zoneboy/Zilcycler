@@ -89,6 +89,12 @@ export const handler = async (event: any) => {
         if (!dbUser) return response(401, { error: "Invalid email or password" });
         if (!dbUser.password_hash) return response(401, { error: "Account security update required. Please reset password." });
 
+        // Check Maintenance Mode (Backend Enforcement)
+        const configCheck = await query('SELECT maintenance_mode FROM system_config WHERE id = 1');
+        if (configCheck.rows[0]?.maintenance_mode && dbUser.role !== 'ADMIN' && dbUser.role !== 'STAFF') {
+             return response(503, { error: "System is in maintenance mode. Staff access only." });
+        }
+
         const isValid = verifyPassword(password, dbUser.password_hash);
         if (!isValid) return response(401, { error: "Invalid email or password" });
 
@@ -128,6 +134,12 @@ export const handler = async (event: any) => {
     }
 
     if (cleanPath === 'auth/send-verification' && method === 'POST') {
+        // Check if registrations are allowed
+        const configCheck = await query('SELECT allow_registrations FROM system_config WHERE id = 1');
+        if (!configCheck.rows[0]?.allow_registrations) {
+             return response(403, { error: "New registrations are currently closed." });
+        }
+
         const { email } = body;
         const userCheck = await query('SELECT id FROM users WHERE email = $1', [email]);
         if (userCheck.rows.length > 0) return response(409, { error: "Email already registered. Please login." });
@@ -141,7 +153,6 @@ export const handler = async (event: any) => {
         );
 
         if (process.env.SMTP_HOST) {
-             // Send via Nodemailer (Abbreviated for brevity, assuming setup matches existing)
              try {
                 await transporter.sendMail({
                     from: process.env.SMTP_FROM,
@@ -157,6 +168,12 @@ export const handler = async (event: any) => {
     }
 
     if (cleanPath === 'auth/register' && method === 'POST') {
+        // Double check registration config
+        const configCheck = await query('SELECT allow_registrations FROM system_config WHERE id = 1');
+        if (!configCheck.rows[0]?.allow_registrations) {
+             return response(403, { error: "Registrations closed." });
+        }
+
         const { user: regUser, password, otp } = body;
         
         const otpCheck = await query('SELECT * FROM password_resets WHERE email = $1', [regUser.email]);
@@ -196,12 +213,13 @@ export const handler = async (event: any) => {
         return response(200, { success: true });
     }
 
-    // --- PROTECTED ROUTES ---
+    // --- PROTECTED ROUTES (ALL BELOW REQUIRE AUTH) ---
+    if (!user) {
+        return response(401, { error: "Unauthorized access" });
+    }
     
     // Change Password
     if (cleanPath.startsWith('auth/change-password')) {
-        if (!user) return response(401, { error: "Unauthorized" });
-        
         if (cleanPath === 'auth/change-password/initiate' && method === 'POST') {
             const { userId, currentPassword } = body;
             if (user.userId !== userId) return response(403, { error: "Forbidden" });
@@ -232,14 +250,112 @@ export const handler = async (event: any) => {
         }
     }
 
+    // CONFIG & RATES (Protected Read, Admin Write)
+    if (cleanPath === 'config') {
+        const configRes = await query('SELECT * FROM system_config WHERE id = 1');
+        const ratesRes = await query('SELECT * FROM waste_rates');
+        
+        const ratesObj: any = {};
+        ratesRes.rows.forEach((r: any) => {
+            ratesObj[r.category] = {
+                rate: parseFloat(r.rate),
+                co2: parseFloat(r.co2_saved_per_kg || 0)
+            };
+        });
+
+        return response(200, {
+            sysConfig: {
+                maintenanceMode: configRes.rows[0]?.maintenance_mode || false,
+                allowRegistrations: configRes.rows[0]?.allow_registrations || true
+            },
+            wasteRates: ratesObj
+        });
+    }
+    
+    if (cleanPath === 'config/update' && method === 'POST') {
+        if (user.role !== 'ADMIN') return response(403, { error: "Admin only" });
+        const { maintenanceMode, allowRegistrations } = body;
+        await query('UPDATE system_config SET maintenance_mode = $1, allow_registrations = $2 WHERE id = 1', [maintenanceMode, allowRegistrations]);
+        return response(200, { success: true });
+    }
+    
+    if (cleanPath === 'rates/update' && method === 'POST') {
+        if (user.role !== 'ADMIN') return response(403, { error: "Admin only" });
+        const { rates } = body;
+        for (const [category, data] of Object.entries(rates)) {
+            const typedData = data as any; 
+            await query('INSERT INTO waste_rates (category, rate, co2_saved_per_kg) VALUES ($1, $2, $3) ON CONFLICT (category) DO UPDATE SET rate = $2, co2_saved_per_kg = $3', [category, typedData.rate, typedData.co2]);
+        }
+        return response(200, { success: true });
+    }
+
+    // BLOG (Protected Read, Admin Write)
+    if (cleanPath === 'blog') {
+        if (method === 'GET') {
+            const { rows } = await query('SELECT * FROM blog_posts ORDER BY created_at DESC');
+            return response(200, rows);
+        }
+        if (method === 'POST') {
+            if (!isAdminOrStaff) return response(403, { error: "Forbidden" });
+            const p = body;
+            await query('INSERT INTO blog_posts (id, title, category, excerpt, image) VALUES ($1, $2, $3, $4, $5)', [p.id, p.title, p.category, p.excerpt, p.image]);
+            return response(201, { success: true });
+        }
+        if (method === 'DELETE') {
+            if (!isAdminOrStaff) return response(403, { error: "Forbidden" });
+            const { id } = body;
+            await query('DELETE FROM blog_posts WHERE id = $1', [id]);
+            return response(200, { success: true });
+        }
+    }
+
+    // LOCATIONS (Protected Read)
+    if (cleanPath === 'locations') {
+        if (method === 'GET') {
+            const { rows } = await query('SELECT * FROM drop_off_locations');
+            const locations = rows.map((l: any) => ({
+                id: l.id,
+                name: l.name,
+                address: l.address,
+                open: l.open_hours,
+                url: l.map_url,
+                lat: parseFloat(l.lat),
+                lng: parseFloat(l.lng)
+            }));
+            return response(200, locations);
+        }
+    }
+
+    // CERTIFICATES (Protected Read, Admin Write)
+    if (cleanPath === 'certificates') {
+        if (method === 'GET') {
+            const { rows } = await query('SELECT * FROM certificates ORDER BY created_at DESC');
+            const certs = rows.map((c: any) => ({
+                id: c.id,
+                orgId: c.org_id,
+                orgName: c.org_name,
+                month: c.month,
+                year: c.year,
+                url: c.url,
+                dateIssued: c.created_at
+            }));
+            return response(200, certs);
+        }
+        if (method === 'POST') {
+            if (!isAdminOrStaff) return response(403, { error: "Forbidden" });
+            const c = body;
+            await query(
+                'INSERT INTO certificates (id, org_id, org_name, month, year, url) VALUES ($1, $2, $3, $4, $5, $6)',
+                [c.id, c.orgId, c.orgName, c.month, c.year, c.url]
+            );
+            return response(201, { success: true });
+        }
+    }
+
     // USERS
     if (cleanPath === 'users') {
-      if (!user) return response(401, { error: "Unauthorized" });
-
       if (method === 'GET') {
-        // ONLY Admin/Staff can see all users
         if (!isAdminOrStaff) return response(403, { error: "Access denied" });
-        
         const { rows } = await query('SELECT id, name, email, role, phone, avatar, zoints_balance, total_recycled_kg, is_active, gender, address, industry, esg_score, bank_name, account_number, account_name, created_at FROM users');
         const formattedUsers = rows.map((u: any) => ({
             ...u,
@@ -257,9 +373,7 @@ export const handler = async (event: any) => {
       }
       
       if (method === 'POST') {
-        // Only Admin can create users manually (e.g. creating Staff)
         if (user.role !== 'ADMIN') return response(403, { error: "Only admins can create users manually" });
-        
         const { id, name, email, role, phone, password, gender, address, industry, avatar } = body;
         const passwordHash = password ? hashPassword(password) : null;
         await query(
@@ -271,10 +385,8 @@ export const handler = async (event: any) => {
 
       if (method === 'PUT') {
           const { id, updates } = body;
-          // Users can update themselves, Admins can update anyone
           if (user.userId !== id && !isAdminOrStaff) return response(403, { error: "Forbidden" });
 
-          // Prevent non-admins from updating sensitive fields
           if (!isAdminOrStaff) {
               delete updates.zointsBalance;
               delete updates.isActive;
@@ -303,19 +415,12 @@ export const handler = async (event: any) => {
 
     // PICKUPS
     if (cleanPath === 'pickups') {
-      if (!user) return response(401, { error: "Unauthorized" });
-
       if (method === 'GET') {
         const { rows } = await query('SELECT * FROM pickups ORDER BY created_at DESC');
         let filteredRows = rows;
-        
-        // Filtering Logic based on Role
         if (!isAdminOrStaff && user.role !== 'COLLECTOR') {
-            // Households/Orgs only see their own
             filteredRows = rows.filter((r: any) => r.user_id === user.userId);
         }
-        // Collectors see all (or assigned) to find work. Admin see all.
-
         const pickups = filteredRows.map((p: any) => ({
             ...p,
             userId: p.user_id,
@@ -330,7 +435,6 @@ export const handler = async (event: any) => {
 
       if (method === 'POST') {
         const p = body;
-        // Ensure users can only schedule for themselves unless Admin
         if (p.userId !== user.userId && !isAdminOrStaff) return response(403, { error: "Cannot schedule for others" });
 
         await query(
@@ -343,9 +447,6 @@ export const handler = async (event: any) => {
 
       if (method === 'PUT') {
           const { id, updates } = body;
-          // Validation logic could be stricter here, but simplifying for now
-          // Only Admin/Staff/Collector (Driver) should update status/weight
-          
           if (updates.status) await query('UPDATE pickups SET status = $1 WHERE id = $2', [updates.status, id]);
           if (updates.driver) await query('UPDATE pickups SET driver = $1 WHERE id = $2', [updates.driver, id]);
           if (updates.weight) {
@@ -355,7 +456,6 @@ export const handler = async (event: any) => {
                   'UPDATE pickups SET status=$1, weight=$2, earned_zoints=$3, collection_details=$4 WHERE id=$5',
                   [updates.status, updates.weight, updates.earnedZoints, JSON.stringify(updates.collectionDetails), id]
               );
-              // Credit user
               const pickupRes = await query('SELECT user_id FROM pickups WHERE id = $1', [id]);
               if(pickupRes.rows[0]) {
                   await query('UPDATE users SET zoints_balance = zoints_balance + $1 WHERE id = $2', [updates.earnedZoints, pickupRes.rows[0].user_id]);
@@ -365,57 +465,14 @@ export const handler = async (event: any) => {
       }
     }
 
-    // CONFIG & RATES (Public Read, Admin Write)
-    if (cleanPath === 'config') {
-        const configRes = await query('SELECT * FROM system_config WHERE id = 1');
-        const ratesRes = await query('SELECT * FROM waste_rates');
-        
-        const ratesObj: any = {};
-        ratesRes.rows.forEach((r: any) => {
-            ratesObj[r.category] = {
-                rate: parseFloat(r.rate),
-                co2: parseFloat(r.co2_saved_per_kg || 0)
-            };
-        });
-
-        return response(200, {
-            sysConfig: {
-                maintenanceMode: configRes.rows[0]?.maintenance_mode || false,
-                allowRegistrations: configRes.rows[0]?.allow_registrations || true
-            },
-            wasteRates: ratesObj
-        });
-    }
-    
-    if (cleanPath === 'config/update' && method === 'POST') {
-        if (!user || user.role !== 'ADMIN') return response(403, { error: "Admin only" });
-        const { maintenanceMode, allowRegistrations } = body;
-        await query('UPDATE system_config SET maintenance_mode = $1, allow_registrations = $2 WHERE id = 1', [maintenanceMode, allowRegistrations]);
-        return response(200, { success: true });
-    }
-    
-    if (cleanPath === 'rates/update' && method === 'POST') {
-        if (!user || user.role !== 'ADMIN') return response(403, { error: "Admin only" });
-        const { rates } = body;
-        for (const [category, data] of Object.entries(rates)) {
-            const typedData = data as any; 
-            await query('INSERT INTO waste_rates (category, rate, co2_saved_per_kg) VALUES ($1, $2, $3) ON CONFLICT (category) DO UPDATE SET rate = $2, co2_saved_per_kg = $3', [category, typedData.rate, typedData.co2]);
-        }
-        return response(200, { success: true });
-    }
-
     // REDEMPTION
     if (cleanPath === 'redemption') {
-        if (!user) return response(401, { error: "Unauthorized" });
-
         if (method === 'GET') {
             const { rows } = await query('SELECT * FROM redemption_requests ORDER BY created_at DESC');
             let filteredRows = rows;
-            // RBAC
             if (!isAdminOrStaff) {
                 filteredRows = rows.filter((r: any) => r.user_id === user.userId);
             }
-
             const requests = filteredRows.map((r: any) => ({
                 id: r.id,
                 userId: r.user_id,
@@ -459,76 +516,9 @@ export const handler = async (event: any) => {
         }
     }
 
-    // BLOG (Public Read, Admin Write)
-    if (cleanPath === 'blog') {
-        if (method === 'GET') {
-            const { rows } = await query('SELECT * FROM blog_posts ORDER BY created_at DESC');
-            return response(200, rows);
-        }
-        if (method === 'POST') {
-            if (!isAdminOrStaff) return response(403, { error: "Forbidden" });
-            const p = body;
-            await query('INSERT INTO blog_posts (id, title, category, excerpt, image) VALUES ($1, $2, $3, $4, $5)', [p.id, p.title, p.category, p.excerpt, p.image]);
-            return response(201, { success: true });
-        }
-        if (method === 'DELETE') {
-            if (!isAdminOrStaff) return response(403, { error: "Forbidden" });
-            const { id } = body;
-            await query('DELETE FROM blog_posts WHERE id = $1', [id]);
-            return response(200, { success: true });
-        }
-    }
-
-    // CERTIFICATES (Public Read/Link, Admin Write)
-    if (cleanPath === 'certificates') {
-        if (method === 'GET') {
-            const { rows } = await query('SELECT * FROM certificates ORDER BY created_at DESC');
-            const certs = rows.map((c: any) => ({
-                id: c.id,
-                orgId: c.org_id,
-                orgName: c.org_name,
-                month: c.month,
-                year: c.year,
-                url: c.url,
-                dateIssued: c.created_at
-            }));
-            return response(200, certs);
-        }
-        if (method === 'POST') {
-            if (!isAdminOrStaff) return response(403, { error: "Forbidden" });
-            const c = body;
-            await query(
-                'INSERT INTO certificates (id, org_id, org_name, month, year, url) VALUES ($1, $2, $3, $4, $5, $6)',
-                [c.id, c.orgId, c.orgName, c.month, c.year, c.url]
-            );
-            return response(201, { success: true });
-        }
-    }
-
-    // LOCATIONS (Public Read)
-    if (cleanPath === 'locations') {
-        if (method === 'GET') {
-            const { rows } = await query('SELECT * FROM drop_off_locations');
-            const locations = rows.map((l: any) => ({
-                id: l.id,
-                name: l.name,
-                address: l.address,
-                open: l.open_hours,
-                url: l.map_url,
-                lat: parseFloat(l.lat),
-                lng: parseFloat(l.lng)
-            }));
-            return response(200, locations);
-        }
-    }
-
-    // MESSAGES (Auth Required)
+    // MESSAGES
     if (cleanPath === 'messages') {
-        if (!user) return response(401, { error: "Unauthorized" });
-
         if (method === 'GET') {
-            // In a real app, strict filtering by sender_id OR receiver_id = user.userId
-            // For now, filtering in JS to maintain structure, but SQL filtering is preferred
             const { rows } = await query('SELECT * FROM messages WHERE sender_id = $1 OR receiver_id = $1 ORDER BY created_at ASC', [user.userId]);
             const messages = rows.map((m: any) => ({
                 id: m.id,
