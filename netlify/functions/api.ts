@@ -27,7 +27,19 @@ if (!JWT_SECRET) {
 // In prod, ENCRYPTION_KEY should be set explicitly.
 // We fall back to JWT_SECRET which is now guaranteed to exist.
 const ENCRYPTION_SECRET = process.env.ENCRYPTION_KEY || JWT_SECRET;
-const ENCRYPTION_KEY = scryptSync(ENCRYPTION_SECRET, 'salt', 32); // 32 bytes for aes-256-gcm
+
+const ENCRYPTION_SALT = process.env.ENCRYPTION_SALT;
+
+// Enforce salt in production, fallback for dev ease
+if (!ENCRYPTION_SALT && process.env.NODE_ENV === 'production') {
+    throw new Error('CRITICAL: ENCRYPTION_SALT required in production');
+}
+
+const SALT_BUFFER = ENCRYPTION_SALT 
+    ? Buffer.from(ENCRYPTION_SALT, 'base64') 
+    : Buffer.from('development_salt_fallback_insecure');
+
+const ENCRYPTION_KEY = scryptSync(ENCRYPTION_SECRET, SALT_BUFFER, 32); // 32 bytes for aes-256-gcm
 
 const encrypt = (text: string) => {
     if (!text) return text;
