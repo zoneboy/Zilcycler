@@ -17,12 +17,27 @@ import PickupHistory from './components/PickupHistory';
 import Certificates from './components/Certificates';
 import { Home, FileText, Settings as SettingsIcon, LogOut, ArrowLeft, Building2, Wallet } from 'lucide-react';
 
+// Helper function to check token expiry (Basic JWT check)
+const isTokenExpired = (token: string): boolean => {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return Date.now() >= payload.exp * 1000;
+  } catch (e) {
+    return true; // Treat invalid tokens as expired
+  }
+};
+
 const MainApp: React.FC = () => {
   const { users, loading, verifySession } = useApp();
   
-  // Initialize state from localStorage (Token based)
+  // Initialize state from localStorage (Token based) with validation
   const [sessionToken, setSessionToken] = useState<string | null>(() => {
-      return localStorage.getItem('zilcycler_token');
+      const token = localStorage.getItem('zilcycler_token');
+      if (token && isTokenExpired(token)) {
+          localStorage.removeItem('zilcycler_token');
+          return null;
+      }
+      return token;
   });
 
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);

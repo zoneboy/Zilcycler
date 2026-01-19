@@ -1,61 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Send, ArrowLeft, User, Plus } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { Message, User as UserType, UserRole } from '../types';
+import { Message, User as UserType } from '../types';
 
 // Helper to determine the "other" user in a conversation
 const getCorrespondentId = (msg: Message, currentUserId: string) => {
     return msg.senderId === currentUserId ? msg.receiverId : msg.senderId;
 };
 
-const Messages: React.FC = () => {
-  const { messages, sendMessage, users } = useApp();
-  
-  // Identify Current User (Simulated session retrieval, in real app this comes from Auth Context/Props)
-  // For this component to work isolated we need the ID. 
-  // We'll hack it by finding the first available user if we don't have props, 
-  // BUT realistically this component is rendered inside App.tsx which has the user.
-  // We'll trust the main App passes the user ID down, but `Messages` is currently defined without props in the router switch.
-  // To fix this cleanly without changing App.tsx routing structure significantly, we'll try to find the "active" user from context or local storage.
-  // Ideally, `Messages` should accept `user` prop. Let's assume the first active user for now or try to get it from context or local storage.
-  // Since we don't have `currentUser` in AppContext, we'll implement a simple user picker for testing or assume 'u_current' if not provided.
-  // WAIT: App.tsx renders Messages inside renderScreen(), but it doesn't pass the user! 
-  // I will assume for now we need to grab the user ID from the parent component or modify App.tsx. 
-  // HOWEVER, I cannot modify App.tsx easily to pass props without breaking the interface defined in the prompt files potentially.
-  // ACTUALLY, I can just modify App.tsx to pass user prop to Messages. I'll do that in a separate change if needed.
-  // For now, let's look at `App.tsx`... `case Screen.MESSAGES: return <Messages />;` -> It does NOT pass user.
-  // I will assume `Messages` needs to find the logged in user. Since we don't store session in Context, this is tricky.
-  // STRATEGY: I will modify App.tsx to pass the user to Messages.
-
-  // NOTE: For this specific file, I will define props.
-  return <MessagesContent />; 
-};
-
-// Internal component to handle logic
-const MessagesContent: React.FC = () => {
-   // To make this work without changing App.tsx signature too much, 
-   // we'll assume we can get the current user ID from the Context if we added it, but we didn't.
-   // Workaround: We will use a temporary hook or look for the user in the users array who is "logged in" in the main app state.
-   // But main app state is local.
-   // FIX: I will modify App.tsx to pass `user={effectiveUser}` to `<Messages />`.
-   // So here I will treat it as if I receive props.
-   
-   // Actually, to avoid "Prop 'user' is missing" error until App.tsx is updated, I'll use a placeholder
-   // and let the user select a contact to start.
-   // But wait, the prompt says "Change to live deployment".
-   
-   // Let's rely on a small hack: We'll assume the `users[0]` is the current user if we can't get it, 
-   // OR better, we update App.tsx to pass the user. I will update App.tsx.
-   
-   return <div className="p-4 text-center">Please update App.tsx to pass user prop to Messages component.</div>;
-};
-
-// Redefining the export to include the logic assuming props are passed (I will update App.tsx next)
 interface MessagesProps {
     user: UserType;
 }
 
-export const MessagesWithUser: React.FC<MessagesProps> = ({ user }) => {
+const MessagesWithUser: React.FC<MessagesProps> = ({ user }) => {
   const { messages, sendMessage, users } = useApp();
   const [selectedCorrespondentId, setSelectedCorrespondentId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
