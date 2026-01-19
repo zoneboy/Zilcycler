@@ -16,12 +16,17 @@ const response = (statusCode: number, body: any) => ({
   body: JSON.stringify(body)
 });
 
-const JWT_SECRET = process.env.JWT_SECRET || 'zilcycler-super-secret-key-change-in-prod';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  // Prevent startup with insecure configuration
+  throw new Error('CRITICAL: JWT_SECRET must be set in environment variables');
+}
 
 // --- ENCRYPTION UTILS ---
 // Use a consistent key derived from env var. 
 // In prod, ENCRYPTION_KEY should be set explicitly.
-const ENCRYPTION_SECRET = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-fallback-secret-salt-key';
+// We fall back to JWT_SECRET which is now guaranteed to exist.
+const ENCRYPTION_SECRET = process.env.ENCRYPTION_KEY || JWT_SECRET;
 const ENCRYPTION_KEY = scryptSync(ENCRYPTION_SECRET, 'salt', 32); // 32 bytes for aes-256-gcm
 
 const encrypt = (text: string) => {
