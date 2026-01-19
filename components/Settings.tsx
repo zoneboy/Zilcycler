@@ -15,6 +15,19 @@ interface Props {
 
 type SettingsView = 'MAIN' | 'ACCOUNT' | 'PRIVACY' | 'SUPPORT';
 
+const validateImage = (file: File) => {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  const maxSize = 5 * 1024 * 1024; // 5MB
+
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('Invalid file type. Only JPEG, PNG, and WebP are allowed.');
+  }
+  
+  if (file.size > maxSize) {
+    throw new Error('File too large. Maximum size is 5MB.');
+  }
+};
+
 const Settings: React.FC<Props> = ({ user, onLogout }) => {
   const { updateUser, initiateChangePassword, confirmChangePassword } = useApp();
   const [currentView, setCurrentView] = useState<SettingsView>('MAIN');
@@ -103,10 +116,12 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Basic size validation (e.g., max 2MB)
-      if (file.size > 2 * 1024 * 1024) {
-          alert("File size too large. Please upload an image smaller than 2MB.");
-          return;
+      try {
+        validateImage(file);
+      } catch (err: any) {
+        alert(err.message);
+        e.target.value = ''; // Reset input
+        return;
       }
 
       setIsUploadingAvatar(true);

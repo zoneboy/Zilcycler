@@ -15,6 +15,19 @@ interface SchedulePickupProps {
   onSubmit: () => void;
 }
 
+const validateImage = (file: File) => {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  const maxSize = 5 * 1024 * 1024; // 5MB
+
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('Invalid file type. Only JPEG, PNG, and WebP are allowed.');
+  }
+  
+  if (file.size > maxSize) {
+    throw new Error('File too large. Maximum size is 5MB.');
+  }
+};
+
 const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit }) => {
   const { schedulePickup } = useApp();
   const [success, setSuccess] = useState(false);
@@ -45,10 +58,12 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
 
-      // File size validation (Max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-          alert("File is too large. Please upload an image smaller than 5MB.");
-          return;
+      try {
+        validateImage(file);
+      } catch (err: any) {
+        alert(err.message);
+        e.target.value = ''; // Reset input
+        return;
       }
 
       setFileName(file.name);
