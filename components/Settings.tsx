@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
 import { useApp } from '../context/AppContext';
-import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, AlertCircle, ArrowLeft, Save, Lock, Eye, EyeOff, Check, Globe, Trash2, AlertTriangle, Landmark, Camera, KeyRound, Loader2 } from 'lucide-react';
+import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, AlertCircle, ArrowLeft, Save, Lock, Eye, EyeOff, Check, Globe, Trash2, AlertTriangle, Landmark, Camera, KeyRound, Loader2, Phone, Mail, Headphones } from 'lucide-react';
 
 // Access environment variables injected by Vite
 const env = (import.meta as any).env || ({} as any);
@@ -13,7 +13,7 @@ interface Props {
   onLogout: () => void;
 }
 
-type SettingsView = 'MAIN' | 'ACCOUNT' | 'PRIVACY';
+type SettingsView = 'MAIN' | 'ACCOUNT' | 'PRIVACY' | 'SUPPORT';
 
 const Settings: React.FC<Props> = ({ user, onLogout }) => {
   const { updateUser, initiateChangePassword, confirmChangePassword } = useApp();
@@ -281,6 +281,29 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
               <div className="text-left">
                 <span className="font-medium text-gray-700 dark:text-gray-200 block">Privacy & Security</span>
                 <span className="text-xs text-gray-400 dark:text-gray-500">Password, Security settings</span>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-gray-300 dark:text-gray-600" />
+         </button>
+      </div>
+
+      {/* Help & Support Group */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden transition-colors">
+         <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50">
+          <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm uppercase tracking-wide">Help & Support</h3>
+        </div>
+
+         <button 
+            onClick={() => setCurrentView('SUPPORT')}
+            className="w-full p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+         >
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-pink-50 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 rounded-lg">
+                <Headphones className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <span className="font-medium text-gray-700 dark:text-gray-200 block">Contact Support</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">Reach out to our team</span>
               </div>
             </div>
             <ChevronRight className="w-5 h-5 text-gray-300 dark:text-gray-600" />
@@ -601,11 +624,58 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     </div>
   );
 
+  const renderSupport = () => (
+    <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center gap-2 mb-2">
+            <button onClick={() => setCurrentView('MAIN')} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
+                <ArrowLeft className="w-6 h-6 text-gray-600 dark:text-gray-300" />
+            </button>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Support</h2>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-6 text-center">
+            <div className="w-24 h-24 bg-green-50 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto text-green-600 dark:text-green-500 mb-4">
+                <Headphones className="w-12 h-12" />
+            </div>
+            
+            <div className="space-y-2">
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">We're here to help</h3>
+                <p className="text-gray-500 dark:text-gray-400">
+                    Have questions or issues? Contact our support team directly.
+                </p>
+            </div>
+
+            <div className="space-y-4 pt-4">
+                <a href="tel:08173888000" className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 hover:border-green-500 dark:hover:border-green-500 hover:shadow-md transition-all group bg-gray-50 dark:bg-gray-800/50">
+                    <div className="w-12 h-12 bg-white dark:bg-gray-700 rounded-full flex items-center justify-center text-gray-400 group-hover:text-green-600 dark:group-hover:text-green-400 shadow-sm transition-colors">
+                        <Phone className="w-6 h-6" />
+                    </div>
+                    <div className="text-left">
+                        <p className="text-xs font-bold text-gray-400 uppercase">Call Us</p>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white font-mono">0817 388 8000</p>
+                    </div>
+                </a>
+
+                <a href="mailto:admin@zilcycler.com" className="flex items-center gap-4 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 hover:border-green-500 dark:hover:border-green-500 hover:shadow-md transition-all group bg-gray-50 dark:bg-gray-800/50">
+                    <div className="w-12 h-12 bg-white dark:bg-gray-700 rounded-full flex items-center justify-center text-gray-400 group-hover:text-green-600 dark:group-hover:text-green-400 shadow-sm transition-colors">
+                        <Mail className="w-6 h-6" />
+                    </div>
+                    <div className="text-left">
+                        <p className="text-xs font-bold text-gray-400 uppercase">Email Us</p>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white">admin@zilcycler.com</p>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+  );
+
   return (
     <div className="h-full">
         {currentView === 'MAIN' && renderMain()}
         {currentView === 'ACCOUNT' && renderAccount()}
         {currentView === 'PRIVACY' && renderPrivacy()}
+        {currentView === 'SUPPORT' && renderSupport()}
     </div>
   );
 };
