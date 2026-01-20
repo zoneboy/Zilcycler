@@ -364,6 +364,39 @@ export const handler = async (event: any) => {
     if (!user) {
         return response(401, { error: "Unauthorized access" });
     }
+
+    // --- CLOUDINARY SIGNING ENDPOINT ---
+    if (cleanPath === 'auth/sign-upload' && method === 'POST') {
+        // This endpoint returns a signature so the client can upload directly to Cloudinary
+        // without exposing the API Secret.
+        if (!(await checkRateLimit(`upload_sign:${user.userId}`))) {
+            return response(429, { error: 'Too many upload attempts.' });
+        }
+
+        const { folder } = body;
+        const safeFolder = folder || 'zilcycler_general';
+        const timestamp = Math.round((new Date()).getTime() / 1000);
+        
+        // Ensure env vars are present
+        if (!process.env.CLOUDINARY_API_SECRET || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_CLOUD_NAME) {
+            console.error("Cloudinary env vars missing");
+            return response(500, { error: "Upload configuration error" });
+        }
+
+        // Signature generation: SHA1(sorted_params_string + api_secret)
+        // Params to sign: folder, timestamp
+        const paramsToSign = `folder=${safeFolder}&timestamp=${timestamp}`;
+        const signatureStr = paramsToSign + process.env.CLOUDINARY_API_SECRET;
+        const signature = crypto.createHash('sha1').update(signatureStr).digest('hex');
+
+        return response(200, {
+            signature,
+            timestamp,
+            apiKey: process.env.CLOUDINARY_API_KEY,
+            cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+            folder: safeFolder
+        });
+    }
     
     // Change Password
     if (cleanPath.startsWith('auth/change-password')) {

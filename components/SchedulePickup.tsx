@@ -3,12 +3,6 @@ import { User, PickupTask } from '../types';
 import { Calendar, Clock, Camera, MapPin, CheckCircle, Upload, Phone, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
-// Access environment variables injected by Vite
-// Safely access import.meta.env to prevent runtime errors if undefined
-const env = (import.meta as any).env || ({} as any);
-const CLOUDINARY_CLOUD_NAME = env.VITE_CLOUDINARY_CLOUD_NAME; 
-const CLOUDINARY_UPLOAD_PRESET = env.VITE_CLOUDINARY_UPLOAD_PRESET; 
-
 interface SchedulePickupProps {
   user: User;
   onBack: () => void;
@@ -79,30 +73,50 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
   };
 
   const uploadToCloudinary = async (file: File): Promise<string | null> => {
-      // Safety check for environment variables
-      if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
-          console.error("Cloudinary credentials missing. Ensure VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET are set.");
-          alert("System Configuration Error: Image upload is currently disabled. Please contact support.");
-          return null;
-      }
-
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-      formData.append('folder', 'zilcycler_pickups'); 
-
       try {
-          const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+          // 1. Get Authentication Token
+          const token = localStorage.getItem('zilcycler_token');
+          if (!token) {
+              alert("You must be logged in to upload images.");
+              return null;
+          }
+
+          // 2. Request Signature from Backend
+          const signRes = await fetch('/api/auth/sign-upload', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ folder: 'zilcycler_pickups' })
+          });
+
+          if (!signRes.ok) {
+              throw new Error('Failed to sign upload request.');
+          }
+
+          const { signature, timestamp, apiKey, cloudName, folder } = await signRes.json();
+
+          // 3. Prepare Form Data for Cloudinary
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('api_key', apiKey);
+          formData.append('timestamp', timestamp.toString());
+          formData.append('signature', signature);
+          formData.append('folder', folder);
+
+          // 4. Upload to Cloudinary
+          const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
               method: 'POST',
               body: formData
           });
 
-          if (!response.ok) {
-              const errorData = await response.json();
+          if (!uploadRes.ok) {
+              const errorData = await uploadRes.json();
               throw new Error(errorData.error?.message || 'Upload failed');
           }
 
-          const data = await response.json();
+          const data = await uploadRes.json();
           return data.secure_url;
       } catch (error) {
           console.error("Cloudinary Upload Error:", error);
