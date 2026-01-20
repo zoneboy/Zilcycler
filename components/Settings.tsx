@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
 import { useApp } from '../context/AppContext';
-import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, AlertCircle, ArrowLeft, Save, Lock, Eye, EyeOff, Check, Globe, Trash2, AlertTriangle, Landmark, Camera, KeyRound, Loader2, Phone, Mail, Headphones } from 'lucide-react';
+import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, AlertCircle, ArrowLeft, Save, Lock, Eye, EyeOff, Check, Globe, Trash2, AlertTriangle, Landmark, Camera, KeyRound, Loader2, Phone, Mail, Headphones, Share2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -173,6 +173,22 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     }, 1500);
   };
 
+  const handleShareApp = async () => {
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'Zilcycler',
+                text: 'Join me on Zilcycler to recycle and earn rewards!',
+                url: window.location.origin
+            });
+        } catch (error) {
+            console.log('Error sharing', error);
+        }
+    } else {
+        alert("Sharing is not supported on this browser/device.");
+    }
+  };
+
   // Step 1: Initiate Password Change
   const handleInitiatePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -311,6 +327,25 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
               <div className="text-left">
                 <span className="font-medium text-gray-700 dark:text-gray-200 block">Privacy & Security</span>
                 <span className="text-xs text-gray-400 dark:text-gray-500">Password, Security settings</span>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-gray-300 dark:text-gray-600" />
+         </button>
+      </div>
+
+       {/* Share App Button */}
+       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden transition-colors">
+         <button 
+            onClick={handleShareApp}
+            className="w-full p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+         >
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                <Share2 className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <span className="font-medium text-gray-700 dark:text-gray-200 block">Share App</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">Invite friends to join</span>
               </div>
             </div>
             <ChevronRight className="w-5 h-5 text-gray-300 dark:text-gray-600" />
