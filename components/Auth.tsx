@@ -107,12 +107,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
       try {
           await requestPasswordReset(resetEmail);
-          setSuccessMessage("OTP sent! Check your email.");
+          setSuccessMessage("If account exists, code sent.");
           setTimeout(() => {
               setSuccessMessage('');
               setView('forgot_password_verify');
               setIsSubmitting(false);
-          }, 1500);
+          }, 2000);
       } catch (error: any) {
           setValidationError(error.message || "Failed to request OTP.");
           setIsSubmitting(false);
