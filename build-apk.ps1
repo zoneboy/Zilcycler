@@ -44,10 +44,41 @@ if ($env:JAVA_HOME) {
     }
 }
 
-# 2. Run the build
+# 2. Check for Android SDK and setup local.properties
+Write-Host "`nChecking Android SDK configuration..."
+$sdkPath = $env:ANDROID_HOME
+
+if (-not $sdkPath) {
+    # Check common default location
+    $defaultSdk = "$env:USERPROFILE\AppData\Local\Android\Sdk"
+    if (Test-Path $defaultSdk) {
+        $sdkPath = $defaultSdk
+        $env:ANDROID_HOME = $sdkPath
+        Write-Host "Auto-located Android SDK at: $sdkPath" -ForegroundColor Green
+    } else {
+        Write-Host "Could not automatically find Android SDK." -ForegroundColor Red
+        Write-Host "Please ensure Android Studio is installed and the SDK is at $defaultSdk"
+    }
+} else {
+    Write-Host "ANDROID_HOME is set to: $sdkPath" -ForegroundColor Green
+}
+
+# Create local.properties if we found an SDK or if ANDROID_HOME was set
+if ($sdkPath -and (Test-Path "android")) {
+    $localPropsPath = "android\local.properties"
+    # Convert backslashes to forward slashes for Gradle compatibility
+    $sdkPathFormatted = $sdkPath -replace "\\", "/"
+    
+    "sdk.dir=$sdkPathFormatted" | Out-File -FilePath $localPropsPath -Encoding ascii
+    Write-Host "Updated $localPropsPath with SDK location." -ForegroundColor Green
+}
+
+# 3. Run the build
 if (Test-Path "android") {
     Write-Host "`nBuilding APK..."
     Set-Location android
+    
+    # Run Gradle
     ./gradlew assembleDebug
     
     if ($LASTEXITCODE -eq 0) {
@@ -61,6 +92,8 @@ if (Test-Path "android") {
     } else {
         Set-Location ..
         Write-Host "`nGradle build failed." -ForegroundColor Red
+        Write-Host "Please check the error message above."
+        Write-Host "If it says 'SDK location not found', ensure Android Studio is installed."
     }
 } else {
     Write-Host "Android folder not found. Please run 'npm run mobile:setup' first." -ForegroundColor Red
