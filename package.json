@@ -1,47 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#15803d" />
+    <title>Zilcycler</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        background-color: #f3f4f6;
+      }
+      .dark body {
+        background-color: #111827;
+      }
+      .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom, 20px);
+      }
+      /* Hide scrollbar for Chrome, Safari and Opera */
+      .no-scrollbar::-webkit-scrollbar {
+          display: none;
+      }
+      /* Hide scrollbar for IE, Edge and Firefox */
+      .no-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+      }
+      @keyframes fade-in-up {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes fade-in-down {
+          from { opacity: 0; transform: translateY(-20px); }
+          to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+      }
+      .animate-fade-in-up { animation: fade-in-up 0.6s ease-out forwards; }
+      .animate-fade-in-down { animation: fade-in-down 0.6s ease-out forwards; }
+      .animate-fade-in { animation: fade-in 0.4s ease-out forwards; }
+    </style>
+  <script type="importmap">
 {
-  "name": "zilcycler",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview",
-    "generate-secret": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
-  },
-  "dependencies": {
-    "@capacitor/android": "^5.7.0",
-    "@capacitor/core": "^5.7.0",
-    "@upstash/ratelimit": "^1.0.0",
-    "@upstash/redis": "^1.28.0",
-    "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "lucide-react": "^0.344.0",
-    "nodemailer": "^6.9.13",
-    "pg": "^8.11.3",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "recharts": "^2.12.2"
-  },
-  "devDependencies": {
-    "@capacitor/cli": "^5.7.0",
-    "@types/bcryptjs": "^2.4.6",
-    "@types/jsonwebtoken": "^9.0.6",
-    "@types/node": "^20.11.24",
-    "@types/nodemailer": "^6.4.14",
-    "@types/pg": "^8.11.2",
-    "@types/react": "^18.2.64",
-    "@types/react-dom": "^18.2.21",
-    "@vitejs/plugin-react": "^4.2.1",
-    "autoprefixer": "^10.4.18",
-    "eslint": "^8.57.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.5",
-    "postcss": "^8.4.35",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5.2.2",
-    "vite": "^5.1.4",
-    "vite-plugin-pwa": "^0.19.0"
+  "imports": {
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "pg": "https://esm.sh/pg@^8.17.1",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "crypto": "https://esm.sh/crypto@^1.0.1",
+    "nodemailer": "https://esm.sh/nodemailer@^7.0.12",
+    "@google/genai": "https://esm.sh/@google/genai@^1.37.0",
+    "jsonwebtoken": "https://esm.sh/jsonwebtoken@^9.0.3",
+    "@upstash/redis": "https://esm.sh/@upstash/redis@^1.36.1",
+    "@upstash/ratelimit": "https://esm.sh/@upstash/ratelimit@^2.0.8",
+    "bcryptjs": "https://esm.sh/bcryptjs@^3.0.3",
+    "vite-plugin-pwa": "https://esm.sh/vite-plugin-pwa@^1.2.0"
   }
 }
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
