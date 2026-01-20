@@ -63,5 +63,5 @@ if (Test-Path "android") {
         Write-Host "`n❌ Gradle build failed." -ForegroundColor Red
     }
 } else {
-    Write-Host "❌ 'android' folder not found. Please run 'npm run mobile:setup' first." -ForegroundColor Red
+    Write-Host "❌ Android folder not found. Please run [npm run mobile:setup] first." -ForegroundColor Red
 }
