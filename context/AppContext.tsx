@@ -60,18 +60,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return token ? { 'Authorization': `Bearer ${token}` } : {};
   };
 
-  // Helper for safe fetch
+  // Helper for safe fetch with Timeout and Logging
   const safeFetch = async (endpoint: string, options: RequestInit = {}) => {
       const url = `${API_BASE_URL}${endpoint}`;
+      console.log(`[API] Req: ${endpoint}`); // Debug Log for Android Studio
+
+      // Add 15s Timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
       try {
-          const res = await fetch(url, options);
+          const res = await fetch(url, { ...options, signal: controller.signal });
+          clearTimeout(timeoutId);
           
           // Check for HTML response (usually 404 or 500 error page from server/proxy)
           const contentType = res.headers.get("content-type");
           if (contentType && contentType.includes("text/html")) {
               const text = await res.text();
-              console.error(`Received HTML response from ${url}:`, text.substring(0, 100));
-              throw new Error(`Server Error: Endpoint not found or server error at ${endpoint}`);
+              console.error(`[API] HTML Error from ${url}:`, text.substring(0, 100));
+              throw new Error(`Server Error: Endpoint returned HTML instead of JSON at ${endpoint}`);
           }
 
           if (!res.ok) {
@@ -83,12 +90,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               } catch (e) {
                   // If JSON parse fails, use status text
               }
+              console.error(`[API] Error ${res.status} from ${endpoint}:`, errorMessage);
               throw new Error(errorMessage);
           }
           
-          return await res.json();
+          const json = await res.json();
+          // console.log(`[API] Success: ${endpoint}`); // Uncomment for verbose success logs
+          return json;
       } catch (error: any) {
-          console.error(`Fetch error for ${endpoint}:`, error);
+          clearTimeout(timeoutId);
+          if (error.name === 'AbortError') {
+             console.error(`[API] Timeout: ${endpoint} took too long.`);
+             throw new Error("Request timed out. Please check your connection.");
+          }
+          if (error.message === 'Failed to fetch') {
+             console.error(`[API] CORS or Network Error for ${endpoint}`);
+             throw new Error("Unable to connect to server. Please check your internet connection and try again.");
+          }
+          console.error(`[API] Network Error for ${endpoint}:`, error);
           throw error;
       }
   };
@@ -102,6 +121,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
 
         const headers = { 'Authorization': `Bearer ${token}` };
+        console.log("[API] Starting background data sync...");
 
         // Fetch All Protected Data
         const [configData, blogData, locData, certData, usersData, pickupsData, redemptionsData, messagesData] = await Promise.all([
@@ -122,14 +142,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setBlogPosts(blogData || []);
         setDropOffLocations(locData || []);
         setCertificates(certData || []);
-        setUsers(usersData || []);
+        // IMPORTANT: Avoid overwriting users if we have a fresher optimistically added user
+        setUsers(usersData || []); 
         setPickups(pickupsData || []);
         setRedemptionRequests(redemptionsData || []);
         setMessages(messagesData || []);
+        
+        console.log("[API] Data sync complete.");
 
     } catch (error: any) {
         console.error("Failed to load data", error);
-        setErrorMsg(error.message);
+        // Don't set global error message on background sync failure to avoid disrupting user experience
+        if (loading) setErrorMsg(error.message); 
     } finally {
         setLoading(false);
     }
@@ -141,13 +165,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const login = async (email: string, password: string): Promise<{ user: User; token: string }> => {
+      console.log("[Auth] Attempting login...");
       const data = await safeFetch('/auth/login', {
           method: 'POST',
           body: JSON.stringify({ email, password })
       });
       
+      console.log("[Auth] Login success, token received.");
       localStorage.setItem('zilcycler_token', data.token);
-      await fetchAllData();
+
+      // OPTIMIZATION: Inject the logged-in user immediately into state
+      // This allows the app to proceed to Dashboard WITHOUT waiting for fetchAllData to finish
+      if (data.user) {
+          console.log("[Auth] Setting optimistic user state");
+          setUsers(prev => {
+              const others = prev.filter(u => u.id !== data.user.id);
+              return [data.user, ...others];
+          });
+      }
+
+      // Trigger background fetch, but don't let it block the return
+      // We catch errors here so the user isn't stuck if background sync fails
+      fetchAllData().catch(err => console.warn("[Auth] Background sync warning:", err));
+      
       return data;
   };
 

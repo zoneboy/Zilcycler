@@ -6,12 +6,19 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import bcrypt from 'bcryptjs';
 
+// --- CORS CONFIGURATION ---
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS"
+};
+
 // Helper for standard response
 const response = (statusCode: number, body: any) => ({
   statusCode,
   headers: { 
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*" // Allow CORS if needed
+    ...CORS_HEADERS
   },
   body: JSON.stringify(body)
 });
@@ -140,6 +147,15 @@ const verifyPassword = async (password: string, storedHash: string) => {
 };
 
 export const handler = async (event: any) => {
+  // 1. Handle Preflight OPTIONS request immediately
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+        statusCode: 204,
+        headers: CORS_HEADERS,
+        body: ''
+    };
+  }
+
   let cleanPath = event.path
     .replace(/\/?\.netlify\/functions\/api/, '')
     .replace(/^\/api/, '')
