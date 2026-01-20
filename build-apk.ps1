@@ -73,7 +73,17 @@ if ($sdkPath -and (Test-Path "android")) {
     Write-Host "Updated $localPropsPath with SDK location." -ForegroundColor Green
 }
 
-# 3. Run the build
+# 3. Sync Web Assets (Important: Updates the APK with your latest React code)
+Write-Host "`nSyncing web assets to Android project..." -ForegroundColor Yellow
+# Using cmd /c to ensure npm runs correctly in PowerShell script
+cmd /c "npm run mobile:sync"
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Failed to sync web assets. Fix errors above." -ForegroundColor Red
+    exit 1
+}
+
+# 4. Run the build
 if (Test-Path "android") {
     Write-Host "`nBuilding APK..."
     Set-Location android

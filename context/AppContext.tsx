@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { PickupTask, UserRole, WasteRates, SystemConfig, User, RedemptionRequest, BlogPost, DropOffLocation, Message, Certificate } from '../types';
+import { API_BASE_URL } from '../constants';
 
 interface AppContextType {
   pickups: PickupTask[];
@@ -59,11 +60,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return token ? { 'Authorization': `Bearer ${token}` } : {};
   };
 
+  // Helper for safe fetch
+  const safeFetch = async (endpoint: string, options: RequestInit = {}) => {
+      const url = `${API_BASE_URL}${endpoint}`;
+      try {
+          const res = await fetch(url, options);
+          
+          // Check for HTML response (usually 404 or 500 error page from server/proxy)
+          const contentType = res.headers.get("content-type");
+          if (contentType && contentType.includes("text/html")) {
+              const text = await res.text();
+              console.error(`Received HTML response from ${url}:`, text.substring(0, 100));
+              throw new Error(`Server Error: Endpoint not found or server error at ${endpoint}`);
+          }
+
+          if (!res.ok) {
+              // Try to parse error JSON
+              let errorMessage = res.statusText;
+              try {
+                  const errorData = await res.json();
+                  errorMessage = errorData.error || errorMessage;
+              } catch (e) {
+                  // If JSON parse fails, use status text
+              }
+              throw new Error(errorMessage);
+          }
+          
+          return await res.json();
+      } catch (error: any) {
+          console.error(`Fetch error for ${endpoint}:`, error);
+          throw error;
+      }
+  };
+
   const fetchAllData = async () => {
     try {
         const token = localStorage.getItem('zilcycler_token');
         if (!token) {
-            // If no token, we can't fetch protected data (which is now everything)
             setLoading(false);
             return;
         }
@@ -71,29 +104,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const headers = { 'Authorization': `Bearer ${token}` };
 
         // Fetch All Protected Data
-        const [configRes, blogRes, locRes, certRes, usersRes, pickupsRes, redemptionsRes, messagesRes] = await Promise.all([
-             fetch('/api/config', { headers }),
-             fetch('/api/blog', { headers }),
-             fetch('/api/locations', { headers }),
-             fetch('/api/certificates', { headers }),
-             fetch('/api/users', { headers }),
-             fetch('/api/pickups', { headers }),
-             fetch('/api/redemption', { headers }),
-             fetch('/api/messages', { headers })
+        const [configData, blogData, locData, certData, usersData, pickupsData, redemptionsData, messagesData] = await Promise.all([
+             safeFetch('/config', { headers }),
+             safeFetch('/blog', { headers }),
+             safeFetch('/locations', { headers }),
+             safeFetch('/certificates', { headers }),
+             safeFetch('/users', { headers }),
+             safeFetch('/pickups', { headers }),
+             safeFetch('/redemption', { headers }),
+             safeFetch('/messages', { headers })
         ]);
 
-        if (configRes.ok) {
-             const configData = await configRes.json();
+        if (configData) {
              setSysConfig(configData.sysConfig);
              setWasteRates(configData.wasteRates);
         }
-        if (blogRes.ok) setBlogPosts(await blogRes.json());
-        if (locRes.ok) setDropOffLocations(await locRes.json());
-        if (certRes.ok) setCertificates(await certRes.json());
-        if (usersRes.ok) setUsers(await usersRes.json());
-        if (pickupsRes.ok) setPickups(await pickupsRes.json());
-        if (redemptionsRes.ok) setRedemptionRequests(await redemptionsRes.json());
-        if (messagesRes.ok) setMessages(await messagesRes.json());
+        setBlogPosts(blogData || []);
+        setDropOffLocations(locData || []);
+        setCertificates(certData || []);
+        setUsers(usersData || []);
+        setPickups(pickupsData || []);
+        setRedemptionRequests(redemptionsData || []);
+        setMessages(messagesData || []);
 
     } catch (error: any) {
         console.error("Failed to load data", error);
@@ -109,98 +141,63 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   const login = async (email: string, password: string): Promise<{ user: User; token: string }> => {
-      const response = await fetch('/api/auth/login', {
+      const data = await safeFetch('/auth/login', {
           method: 'POST',
           body: JSON.stringify({ email, password })
       });
       
-      if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Login failed');
-      }
-
-      const data = await response.json();
-      // Store token immediately so subsequent fetches work
       localStorage.setItem('zilcycler_token', data.token);
-      
-      // Trigger data refresh to load protected data
       await fetchAllData();
-
       return data;
   };
 
   const verifySession = async (token: string): Promise<{ userId: string; valid: boolean }> => {
-      const response = await fetch('/api/auth/verify', {
+      return await safeFetch('/auth/verify', {
           method: 'GET',
           headers: {
               'Authorization': `Bearer ${token}`
           }
       });
-
-      if (!response.ok) {
-          throw new Error('Invalid or expired session');
-      }
-
-      return await response.json();
   };
 
   const requestPasswordReset = async (email: string): Promise<void> => {
-      const response = await fetch('/api/auth/forgot-password', {
+      await safeFetch('/auth/forgot-password', {
           method: 'POST',
           body: JSON.stringify({ email })
       });
-      
-      if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Request failed');
-      }
   };
 
   const resetPassword = async (email: string, otp: string, newPassword: string): Promise<void> => {
-      const response = await fetch('/api/auth/reset-password', {
+      await safeFetch('/auth/reset-password', {
           method: 'POST',
           body: JSON.stringify({ email, otp, newPassword })
       });
-      
-      if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Reset failed');
-      }
   };
 
   const initiateChangePassword = async (userId: string, currentPassword: string): Promise<void> => {
-      const response = await fetch('/api/auth/change-password/initiate', {
+      await safeFetch('/auth/change-password/initiate', {
           method: 'POST',
           headers: getAuthHeaders(),
           body: JSON.stringify({ userId, currentPassword })
       });
-      if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Password verification failed');
-      }
   };
 
   const confirmChangePassword = async (userId: string, otp: string, newPassword: string): Promise<void> => {
-      const response = await fetch('/api/auth/change-password/confirm', {
+      await safeFetch('/auth/change-password/confirm', {
           method: 'POST',
           headers: getAuthHeaders(),
           body: JSON.stringify({ userId, otp, newPassword })
       });
-      if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Failed to update password');
-      }
   };
 
   const schedulePickup = async (task: PickupTask) => {
     try {
-        const res = await fetch('/api/pickups', {
+        const data = await safeFetch('/pickups', {
             method: 'POST',
             headers: getAuthHeaders(),
             body: JSON.stringify(task)
         });
-        const data = await res.json();
-        if (res.ok && data.id) {
+        if (data.id) {
             const newTask = { ...task, id: data.id };
             setPickups((prev) => [newTask, ...prev]);
         }
@@ -220,7 +217,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }
 
-    await fetch('/api/pickups', {
+    await safeFetch('/pickups', {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({ id, updates })
@@ -229,7 +226,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateWasteRates = async (newRates: WasteRates) => {
     setWasteRates(newRates);
-    await fetch('/api/rates/update', {
+    await safeFetch('/rates/update', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ rates: newRates })
@@ -238,7 +235,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateSysConfig = async (config: SystemConfig) => {
     setSysConfig(config);
-    await fetch('/api/config/update', {
+    await safeFetch('/config/update', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(config)
@@ -247,7 +244,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateUser = async (id: string, updates: Partial<User>) => {
     setUsers((prev) => prev.map(u => (u && u.id === id) ? { ...u, ...updates } : u));
-    await fetch('/api/users', {
+    await safeFetch('/users', {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({ id, updates })
@@ -255,59 +252,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const addUser = async (user: User, password?: string) => {
-    // Standard User Creation (Used by Admin)
-    const response = await fetch('/api/users', {
+    const data = await safeFetch('/users', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ ...user, password })
     });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Registration failed: ${errorText}`);
-    }
-
-    const data = await response.json();
-    // Only update state if successful, use server-generated ID
     const newUser = { ...user, id: data.userId };
     setUsers((prev) => [newUser, ...prev]);
   };
 
   const sendSignupVerification = async (email: string) => {
-      const response = await fetch('/api/auth/send-verification', {
+      await safeFetch('/auth/send-verification', {
           method: 'POST',
           body: JSON.stringify({ email })
       });
-      if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Failed to send verification email');
-      }
   };
 
   const registerUser = async (user: User, password: string, otp: string) => {
-      const response = await fetch('/api/auth/register', {
+      const data = await safeFetch('/auth/register', {
           method: 'POST',
           body: JSON.stringify({ user, password, otp })
       });
 
-      if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Registration failed');
-      }
-
-      const data = await response.json();
       const newUser = { ...user, id: data.userId };
       setUsers((prev) => [newUser, ...prev]);
   };
 
   const createRedemptionRequest = async (req: RedemptionRequest) => {
-    const res = await fetch('/api/redemption', {
+    const data = await safeFetch('/redemption', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(req)
     });
-    const data = await res.json();
-    if(res.ok && data.id) {
+    if(data.id) {
         const newReq = { ...req, id: data.id };
         setRedemptionRequests((prev) => [newReq, ...prev]);
         setUsers((prevUsers) => prevUsers.map(u => 
@@ -330,7 +308,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             ));
         }
     }
-    await fetch('/api/redemption', {
+    await safeFetch('/redemption', {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({ id, status })
@@ -338,20 +316,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const addBlogPost = async (post: BlogPost) => {
-    const res = await fetch('/api/blog', {
+    const data = await safeFetch('/blog', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(post)
     });
-    const data = await res.json();
-    if(res.ok && data.id) {
+    if(data.id) {
         setBlogPosts(prev => [{...post, id: data.id}, ...prev]);
     }
   };
 
   const deleteBlogPost = async (id: string) => {
     setBlogPosts(prev => prev.filter(p => p.id !== id));
-    await fetch('/api/blog', {
+    await safeFetch('/blog', {
         method: 'DELETE',
         headers: getAuthHeaders(),
         body: JSON.stringify({ id })
@@ -359,25 +336,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const sendMessage = async (msg: Message) => {
-      const res = await fetch('/api/messages', {
+      const data = await safeFetch('/messages', {
           method: 'POST',
           headers: getAuthHeaders(),
           body: JSON.stringify(msg)
       });
-      const data = await res.json();
-      if(res.ok && data.id) {
+      if(data.id) {
           setMessages(prev => [...prev, { ...msg, id: data.id }]);
       }
   };
 
   const addCertificate = async (cert: Certificate) => {
-      const res = await fetch('/api/certificates', {
+      const data = await safeFetch('/certificates', {
           method: 'POST',
           headers: getAuthHeaders(),
           body: JSON.stringify(cert)
       });
-      const data = await res.json();
-      if(res.ok && data.id) {
+      if(data.id) {
           setCertificates(prev => [{...cert, id: data.id}, ...prev]);
       }
   };
@@ -399,14 +374,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   if (loading) {
       return (
-        <div className="h-screen w-full flex flex-col items-center justify-center text-green-800">
+        <div className="h-screen w-full flex flex-col items-center justify-center text-green-800 bg-gray-50 dark:bg-gray-900">
            <div className="w-8 h-8 border-4 border-green-200 border-t-green-700 rounded-full animate-spin mb-4"></div>
-           <span className="font-bold">Connecting to Zilcycler Cloud...</span>
+           <span className="font-bold dark:text-gray-200">Connecting to Zilcycler Cloud...</span>
            {errorMsg && (
-             <div className="mt-4 p-4 bg-red-50 text-red-600 rounded-xl text-center max-w-sm">
+             <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 rounded-xl text-center max-w-sm border border-red-100 dark:border-red-800">
                <p className="font-bold mb-1">Connection Error</p>
                <p className="text-xs">{errorMsg}</p>
-               <p className="text-xs mt-2 text-gray-500">Ensure Netlify Dev is running to access the database.</p>
+               <p className="text-xs mt-2 text-gray-500 dark:text-gray-400">Ensure the backend is running and reachable.</p>
              </div>
            )}
         </div>
