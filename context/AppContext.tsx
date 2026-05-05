@@ -35,9 +35,13 @@ interface AppContextType {
   requestPasswordReset: (email: string) => Promise<void>;
   resetPassword: (email: string, otp: string, newPassword: string) => Promise<void>;
   sendSignupVerification: (email: string) => Promise<void>;
-  registerUser: (user: User, password: string, otp: string) => Promise<void>;
+  registerUser: (user: User, password: string, otp: string, acceptedTerms: boolean) => Promise<void>;
   initiateChangePassword: (userId: string, currentPassword: string) => Promise<void>;
   confirmChangePassword: (userId: string, otp: string, newPassword: string) => Promise<void>;
+  
+  // STAGE 2C: Account deletion
+  initiateAccountDeletion: (userId: string, password: string) => Promise<void>;
+  confirmAccountDeletion: (userId: string, otp: string, reason?: string) => Promise<void>;
   
   addUser: (user: User, password: string) => Promise<void>;
   updateUser: (id: string, updates: Partial<User>) => Promise<void>;
@@ -114,12 +118,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [wasteRates, setWasteRates] = useState<WasteRates>({});
     const [loading, setLoading] = useState(true);
     
-    // FIX: Use ref to prevent infinite re-init loop
     const hasInitialized = useRef(false);
-
-    // ============================================================
-    // DATA FETCHERS - all stable references via useCallback with empty deps
-    // ============================================================
 
     const fetchConfig = useCallback(async () => {
         try {
@@ -194,7 +193,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, []);
 
-    // FIX: refreshAll is also stable (empty deps + uses functions that are stable)
     const refreshAll = useCallback(async () => {
         await Promise.all([
             fetchUsers(),
@@ -205,20 +203,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ]);
     }, [fetchUsers, fetchPickups, fetchRedemption, fetchMessages, fetchCertificates]);
 
-    // FIX: Initial load runs ONLY ONCE thanks to hasInitialized ref
     useEffect(() => {
         if (hasInitialized.current) return;
         hasInitialized.current = true;
         
         const init = async () => {
-            // Public endpoints first (no auth required)
             await Promise.all([
                 fetchConfig(),
                 fetchBlog(),
                 fetchLocations(),
             ]);
             
-            // Authenticated endpoints if token exists
             const token = await getToken();
             if (token) {
                 await refreshAll();
@@ -230,31 +225,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // ============================================================
-    // AUTH METHODS
-    // ============================================================
-
     const login = async (email: string, password: string) => {
         const data = await apiCall('auth/login', {
             method: 'POST',
             body: JSON.stringify({ email, password }),
         });
-        // Refresh after token is set by App.tsx (slight delay for storage commit)
         setTimeout(async () => {
             await refreshAll();
         }, 200);
         return { user: data.user, token: data.token };
     };
 
-    // FIX: verifySession does NOT call refreshAll - that caused infinite loop
-    // Refresh happens elsewhere (after login, on demand)
     const verifySession = useCallback(async (token: string) => {
         const response = await fetch(`${API_BASE_URL}/auth/verify`, {
             headers: { 'Authorization': `Bearer ${token}` },
         });
         if (!response.ok) throw new Error('Invalid session');
         const data = await response.json();
-        // Refresh authenticated data ONCE after successful verify
         await refreshAll();
         return data;
     }, [refreshAll]);
@@ -280,10 +267,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
     };
 
-    const registerUser = async (user: User, password: string, otp: string) => {
+    // STAGE 2C: Send acceptedTerms with registration
+    const registerUser = async (user: User, password: string, otp: string, acceptedTerms: boolean) => {
         await apiCall('auth/register', {
             method: 'POST',
-            body: JSON.stringify({ user, password, otp }),
+            body: JSON.stringify({ user, password, otp, acceptedTerms }),
         });
     };
 
@@ -301,9 +289,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
     };
 
-    // ============================================================
-    // USER METHODS
-    // ============================================================
+    // STAGE 2C: Account deletion methods
+    const initiateAccountDeletion = async (userId: string, password: string) => {
+        await apiCall('auth/delete-account/initiate', {
+            method: 'POST',
+            body: JSON.stringify({ userId, password }),
+        });
+    };
+
+    const confirmAccountDeletion = async (userId: string, otp: string, reason?: string) => {
+        await apiCall('auth/delete-account/confirm', {
+            method: 'POST',
+            body: JSON.stringify({ userId, otp, reason: reason || '' }),
+        });
+    };
 
     const addUser = async (user: User, password: string) => {
         await apiCall('users', {
@@ -320,10 +319,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
         await fetchUsers();
     };
-
-    // ============================================================
-    // PICKUP METHODS
-    // ============================================================
 
     const schedulePickup = async (pickup: PickupTask) => {
         await apiCall('pickups', {
@@ -354,10 +349,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [];
     }, [pickups]);
 
-    // ============================================================
-    // REDEMPTION METHODS
-    // ============================================================
-
     const createRedemptionRequest = async (req: RedemptionRequest) => {
         await apiCall('redemption', {
             method: 'POST',
@@ -374,10 +365,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         await Promise.all([fetchRedemption(), fetchUsers()]);
     };
 
-    // ============================================================
-    // MESSAGE METHODS
-    // ============================================================
-
     const sendMessage = async (msg: Message) => {
         await apiCall('messages', {
             method: 'POST',
@@ -385,10 +372,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
         await fetchMessages();
     };
-
-    // ============================================================
-    // CONFIG METHODS
-    // ============================================================
 
     const updateSysConfig = async (config: SystemConfig) => {
         await apiCall('config/update', {
@@ -406,10 +389,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setWasteRates(rates);
     };
 
-    // ============================================================
-    // BLOG METHODS
-    // ============================================================
-
     const addBlogPost = async (post: BlogPost) => {
         await apiCall('blog', {
             method: 'POST',
@@ -426,10 +405,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         await fetchBlog();
     };
 
-    // ============================================================
-    // CERTIFICATE METHODS
-    // ============================================================
-
     const addCertificate = async (cert: Certificate) => {
         await apiCall('certificates', {
             method: 'POST',
@@ -437,10 +412,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
         await fetchCertificates();
     };
-
-    // ============================================================
-    // CONTEXT VALUE
-    // ============================================================
 
     const value: AppContextType = {
         users,
@@ -461,6 +432,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         registerUser,
         initiateChangePassword,
         confirmChangePassword,
+        initiateAccountDeletion,
+        confirmAccountDeletion,
         addUser,
         updateUser,
         schedulePickup,
@@ -478,10 +451,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
-
-// ============================================================
-// HOOK
-// ============================================================
 
 export const useApp = (): AppContextType => {
     const context = useContext(AppContext);

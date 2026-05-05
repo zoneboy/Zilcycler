@@ -11,10 +11,10 @@ interface Props {
   onLogout: () => void;
 }
 
-type SettingsView = 'MAIN' | 'ACCOUNT' | 'PRIVACY' | 'SUPPORT';
+type SettingsView = 'MAIN' | 'ACCOUNT' | 'PRIVACY' | 'SUPPORT' | 'DELETE_ACCOUNT';
 
 const Settings: React.FC<Props> = ({ user, onLogout }) => {
-  const { updateUser, initiateChangePassword, confirmChangePassword } = useApp();
+  const { updateUser, initiateChangePassword, confirmChangePassword, initiateAccountDeletion, confirmAccountDeletion } = useApp();
   const [currentView, setCurrentView] = useState<SettingsView>('MAIN');
   const [notifications, setNotifications] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -51,6 +51,14 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
   
   const [publicProfile, setPublicProfile] = useState(false);
   const [dataSharing, setDataSharing] = useState(true);
+
+  // STAGE 2C: Account deletion state
+  const [deleteStep, setDeleteStep] = useState<'CONFIRM' | 'PASSWORD' | 'OTP'>('CONFIRM');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteOtp, setDeleteOtp] = useState('');
+  const [deleteReason, setDeleteReason] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     if (darkMode) {
@@ -122,7 +130,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     };
     
     try {
-        // Native: Use Capacitor Share for native share sheet
         if (isNative()) {
             await Share.share({
                 title: shareData.title,
@@ -133,13 +140,11 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
             return;
         }
         
-        // Web: Use Web Share API if available
         if (typeof navigator !== 'undefined' && navigator.share) {
             await navigator.share(shareData);
             return;
         }
         
-        // Web fallback: copy URL
         if (typeof navigator !== 'undefined' && navigator.clipboard) {
             await navigator.clipboard.writeText(shareData.url);
             alert('Link copied to clipboard!');
@@ -147,7 +152,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
             alert('Sharing is not supported on this device.');
         }
     } catch (error: any) {
-        // User cancellation is normal, don't show error
         if (error.message && !error.message.toLowerCase().includes('cancel')) {
             console.error('Share error:', error);
         }
@@ -189,7 +193,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
       try {
           await confirmChangePassword(user.id, otp, passwords.new);
           alert("Password changed successfully!");
-          
           setPasswords({ current: '', new: '', confirm: '' });
           setOtp('');
           setIsVerifyingOtp(false);
@@ -200,6 +203,221 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
           setIsSaving(false);
       }
   };
+
+  // STAGE 2C: Account deletion handlers
+  const handleStartDeletion = () => {
+      // Block admins from self-deleting (server also enforces)
+      if (user.role === UserRole.ADMIN) {
+          alert("Admin accounts cannot be self-deleted. Please contact another administrator.");
+          return;
+      }
+      setDeleteStep('CONFIRM');
+      setDeletePassword('');
+      setDeleteOtp('');
+      setDeleteReason('');
+      setDeleteError('');
+      setCurrentView('DELETE_ACCOUNT');
+  };
+
+  const handleSendDeleteOtp = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setDeleteError('');
+      setIsDeleting(true);
+      try {
+          await initiateAccountDeletion(user.id, deletePassword);
+          setDeleteStep('OTP');
+      } catch (err: any) {
+          setDeleteError(err.message || 'Failed to send verification code.');
+      } finally {
+          setIsDeleting(false);
+      }
+  };
+
+  const handleConfirmDelete = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setDeleteError('');
+      
+      if (deleteOtp.length < 6) {
+          setDeleteError('Please enter the 6-digit code from your email.');
+          return;
+      }
+      
+      setIsDeleting(true);
+      try {
+          await confirmAccountDeletion(user.id, deleteOtp, deleteReason);
+          // Account deleted - log out and reload
+          alert('Your account has been deleted. Personal data has been anonymized.');
+          await onLogout();
+      } catch (err: any) {
+          setDeleteError(err.message || 'Failed to delete account.');
+          setIsDeleting(false);
+      }
+  };
+
+  const renderDeleteAccount = () => (
+      <div className="space-y-6 animate-fade-in">
+          <div className="flex items-center gap-2 mb-2">
+              <button onClick={() => setCurrentView('PRIVACY')} disabled={isDeleting} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors disabled:opacity-50">
+                  <ArrowLeft className="w-6 h-6 text-gray-600 dark:text-gray-300" />
+              </button>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Delete Account</h2>
+          </div>
+
+          {deleteError && (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-400 text-sm p-3 rounded-xl flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{deleteError}</span>
+              </div>
+          )}
+
+          {deleteStep === 'CONFIRM' && (
+              <div className="space-y-4 animate-fade-in">
+                  <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30 rounded-2xl p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                          <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                          <h3 className="font-bold text-red-800 dark:text-red-400">This action cannot be undone</h3>
+                      </div>
+                      <p className="text-sm text-red-700 dark:text-red-300/80 mb-3">When you delete your account:</p>
+                      <ul className="space-y-2 text-sm text-red-700 dark:text-red-300/80">
+                          <li className="flex items-start gap-2">
+                              <span className="text-red-500 mt-0.5">•</span>
+                              <span>Your personal information will be anonymized within 30 days</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                              <span className="text-red-500 mt-0.5">•</span>
+                              <span>Your <b>{user.zointsBalance?.toLocaleString() || 0} Zoints</b> will be forfeited</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                              <span className="text-red-500 mt-0.5">•</span>
+                              <span>Pending pickups and redemptions will be cancelled</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                              <span className="text-red-500 mt-0.5">•</span>
+                              <span>You will be immediately logged out</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                              <span className="text-red-500 mt-0.5">•</span>
+                              <span>You can register again with the same email after deletion</span>
+                          </li>
+                      </ul>
+                  </div>
+
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+                      <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">
+                          Reason for leaving (optional)
+                      </label>
+                      <textarea 
+                          rows={3}
+                          value={deleteReason}
+                          onChange={(e) => setDeleteReason(e.target.value)}
+                          placeholder="Help us improve. What didn't work for you?"
+                          maxLength={500}
+                          className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-green-500 dark:text-white transition-colors resize-none text-sm"
+                      />
+                      <p className="text-[10px] text-gray-400 mt-1 text-right">{deleteReason.length}/500</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                      <button 
+                          onClick={() => setCurrentView('PRIVACY')}
+                          className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 py-3 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                      >
+                          Cancel
+                      </button>
+                      <button 
+                          onClick={() => setDeleteStep('PASSWORD')}
+                          className="bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700 transition-colors"
+                      >
+                          Continue
+                      </button>
+                  </div>
+              </div>
+          )}
+
+          {deleteStep === 'PASSWORD' && (
+              <form onSubmit={handleSendDeleteOtp} className="space-y-4 animate-fade-in">
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+                      <h3 className="font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                          <Lock className="w-4 h-4 text-red-600" /> Confirm Your Password
+                      </h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                          Enter your password to verify it's really you. We'll send a confirmation code to <b className="text-gray-700 dark:text-gray-300">{user.email}</b>.
+                      </p>
+                      <input 
+                          type="password"
+                          value={deletePassword}
+                          onChange={(e) => setDeletePassword(e.target.value)}
+                          placeholder="Your password"
+                          className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-red-500 dark:text-white transition-colors"
+                          required
+                          autoFocus
+                          disabled={isDeleting}
+                      />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                      <button 
+                          type="button"
+                          onClick={() => setDeleteStep('CONFIRM')}
+                          disabled={isDeleting}
+                          className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 py-3 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                      >
+                          Back
+                      </button>
+                      <button 
+                          type="submit"
+                          disabled={isDeleting || !deletePassword}
+                          className="bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                          {isDeleting ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</> : 'Send Code'}
+                      </button>
+                  </div>
+              </form>
+          )}
+
+          {deleteStep === 'OTP' && (
+              <form onSubmit={handleConfirmDelete} className="space-y-4 animate-fade-in">
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+                      <h3 className="font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                          <Mail className="w-4 h-4 text-red-600" /> Final Confirmation
+                      </h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                          We sent a 6-digit code to <b className="text-gray-700 dark:text-gray-300">{user.email}</b>. Enter it below to permanently delete your account.
+                      </p>
+                      <input 
+                          type="text"
+                          inputMode="numeric"
+                          value={deleteOtp}
+                          onChange={(e) => setDeleteOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          placeholder="000000"
+                          className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-red-500 dark:text-white transition-colors text-center text-lg font-bold tracking-widest"
+                          required
+                          autoFocus
+                          disabled={isDeleting}
+                      />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                      <button 
+                          type="button"
+                          onClick={() => setDeleteStep('PASSWORD')}
+                          disabled={isDeleting}
+                          className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 py-3 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                      >
+                          Back
+                      </button>
+                      <button 
+                          type="submit"
+                          disabled={isDeleting || deleteOtp.length < 6}
+                          className="bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                          {isDeleting ? <><Loader2 className="w-4 h-4 animate-spin" /> Deleting...</> : 'Delete Forever'}
+                      </button>
+                  </div>
+              </form>
+          )}
+      </div>
+  );
 
   const renderMain = () => (
     <div className="space-y-6 animate-fade-in">
@@ -283,7 +501,7 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
               </div>
               <div className="text-left">
                 <span className="font-medium text-gray-700 dark:text-gray-200 block">Privacy & Security</span>
-                <span className="text-xs text-gray-400 dark:text-gray-500">Password, Security settings</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">Password, Delete account</span>
               </div>
             </div>
             <ChevronRight className="w-5 h-5 text-gray-300 dark:text-gray-600" />
@@ -328,6 +546,13 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
             </div>
             <ChevronRight className="w-5 h-5 text-gray-300 dark:text-gray-600" />
          </button>
+      </div>
+
+      {/* STAGE 2C: Legal links footer */}
+      <div className="text-center text-xs text-gray-400 dark:text-gray-500 py-2">
+          <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-green-600 dark:hover:text-green-500 underline">Privacy Policy</a>
+          <span className="mx-2">·</span>
+          <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="hover:text-green-600 dark:hover:text-green-500 underline">Terms of Service</a>
       </div>
 
       <button 
@@ -377,7 +602,7 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
                     />
                  </div>
                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                     {isUploadingAvatar ? 'Uploading...' : `Tap to ${isNative() ? 'change photo' : 'change photo'}`}
+                     {isUploadingAvatar ? 'Uploading...' : 'Tap to change photo'}
                  </p>
              </div>
 
@@ -628,15 +853,18 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
             </div>
         </div>
 
-        <div className="p-5 rounded-2xl border border-red-100 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 transition-colors">
-             <h3 className="font-bold text-red-800 dark:text-red-400 flex items-center gap-2 mb-2">
-                <AlertTriangle className="w-4 h-4" /> Danger Zone
-            </h3>
-            <p className="text-xs text-red-600 dark:text-red-400/80 mb-4">Once you delete your account, there is no going back. Please be certain.</p>
-            <button onClick={() => alert("Please contact support to delete your account.")} className="w-full bg-white dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 py-3 rounded-xl font-bold text-sm hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors flex items-center justify-center gap-2">
-                <Trash2 className="w-4 h-4" /> Delete Account
-            </button>
-        </div>
+        {/* STAGE 2C: Real account deletion - admins can't self-delete */}
+        {user.role !== UserRole.ADMIN && (
+            <div className="p-5 rounded-2xl border border-red-100 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 transition-colors">
+                 <h3 className="font-bold text-red-800 dark:text-red-400 flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-4 h-4" /> Danger Zone
+                </h3>
+                <p className="text-xs text-red-600 dark:text-red-400/80 mb-4">Once you delete your account, your personal data will be anonymized within 30 days and unredeemed Zoints will be forfeited. This cannot be undone.</p>
+                <button onClick={handleStartDeletion} className="w-full bg-white dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 py-3 rounded-xl font-bold text-sm hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors flex items-center justify-center gap-2">
+                    <Trash2 className="w-4 h-4" /> Delete My Account
+                </button>
+            </div>
+        )}
     </div>
   );
 
@@ -692,6 +920,7 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
         {currentView === 'ACCOUNT' && renderAccount()}
         {currentView === 'PRIVACY' && renderPrivacy()}
         {currentView === 'SUPPORT' && renderSupport()}
+        {currentView === 'DELETE_ACCOUNT' && renderDeleteAccount()}
     </div>
   );
 };

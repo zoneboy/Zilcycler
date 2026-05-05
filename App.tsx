@@ -8,8 +8,9 @@ import {
     setupBackButtonHandler, 
     onNetworkChange,
     getNetworkStatus,
-    isNative,
 } from './utils/native';
+import { initErrorTracking, logError } from './utils/errorTracking';
+import { checkAppVersion, VersionCheckResult } from './utils/versionCheck';
 import Auth from './components/Auth';
 import DashboardHousehold from './components/DashboardHousehold';
 import DashboardCollector from './components/DashboardCollector';
@@ -24,9 +25,9 @@ import MessagesWithUser from './components/Messages';
 import WalletScreen from './components/WalletScreen';
 import PickupHistory from './components/PickupHistory';
 import Certificates from './components/Certificates';
-import { Home, FileText, Settings as SettingsIcon, LogOut, ArrowLeft, Wallet, WifiOff } from 'lucide-react';
+import { Home, FileText, Settings as SettingsIcon, LogOut, ArrowLeft, Wallet, WifiOff, Download, AlertTriangle } from 'lucide-react';
 
-// Helper function to check token expiry (Basic JWT check)
+// JWT expiry helper
 const isTokenExpired = (token: string): boolean => {
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
@@ -34,6 +35,95 @@ const isTokenExpired = (token: string): boolean => {
   } catch (e) {
     return true;
   }
+};
+
+// ============================================================
+// ERROR BOUNDARY (catches React rendering errors)
+// ============================================================
+interface ErrorBoundaryState {
+    hasError: boolean;
+    error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, ErrorBoundaryState> {
+    constructor(props: { children: React.ReactNode }) {
+        super(props);
+        this.state = { hasError: false, error: null };
+    }
+    
+    static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+        return { hasError: true, error };
+    }
+    
+    componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+        logError('react_error_boundary', error, {
+            componentStack: errorInfo.componentStack,
+        });
+    }
+    
+    handleReload = () => {
+        if (typeof window !== 'undefined') {
+            window.location.reload();
+        }
+    };
+    
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-6">
+                    <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 text-center">
+                        <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <AlertTriangle className="w-8 h-8 text-red-600 dark:text-red-400" />
+                        </div>
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Something went wrong</h2>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                            We've been notified. Please reload the app to try again.
+                        </p>
+                        <button 
+                            onClick={this.handleReload}
+                            className="w-full bg-green-700 text-white py-3 rounded-xl font-bold hover:bg-green-800 transition-colors"
+                        >
+                            Reload App
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+
+// ============================================================
+// FORCE UPDATE MODAL
+// ============================================================
+const ForceUpdateModal: React.FC<{ result: VersionCheckResult }> = ({ result }) => {
+    const handleUpdate = () => {
+        if (result.updateUrl && typeof window !== 'undefined') {
+            window.open(result.updateUrl, '_blank');
+        } else if (typeof window !== 'undefined') {
+            window.location.reload();
+        }
+    };
+    
+    return (
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+            <div className="max-w-sm w-full bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 text-center">
+                <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Download className="w-8 h-8 text-green-700 dark:text-green-500" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Update Required</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                    {result.updateMessage || 'A new version of Zilcycler is available. Please update to continue.'}
+                </p>
+                <button 
+                    onClick={handleUpdate}
+                    className="w-full bg-green-700 text-white py-3 rounded-xl font-bold hover:bg-green-800 transition-colors"
+                >
+                    {result.updateUrl ? 'Open Play Store' : 'Reload App'}
+                </button>
+            </div>
+        </div>
+    );
 };
 
 const MainApp: React.FC = () => {
@@ -44,19 +134,29 @@ const MainApp: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.AUTH);
   const [isVerifying, setIsVerifying] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
+  const [forceUpdateInfo, setForceUpdateInfo] = useState<VersionCheckResult | null>(null);
 
-  // STAGE 2B: Initialize native plugins on mount
+  // Initialize native plugins, error tracking, version check
   useEffect(() => {
-    const initNative = async () => {
+    const initApp = async () => {
+      // Error tracking first - want to catch any errors during init
+      initErrorTracking();
+      
+      // Native plugins
       await initStatusBar();
       
-      // Check initial network state
+      // Network status
       const status = await getNetworkStatus();
       setIsOnline(status.connected);
+      
+      // Version check - only enforce force-update, ignore rest
+      const versionResult = await checkAppVersion();
+      if (versionResult?.forceUpdate) {
+        setForceUpdateInfo(versionResult);
+      }
     };
-    initNative();
+    initApp();
     
-    // Listen for network changes
     const cleanup = onNetworkChange((connected) => {
       setIsOnline(connected);
     });
@@ -64,7 +164,7 @@ const MainApp: React.FC = () => {
     return cleanup;
   }, []);
 
-  // STAGE 2B: Async token retrieval
+  // Async token retrieval
   useEffect(() => {
     const loadToken = async () => {
       const token = await getToken();
@@ -116,34 +216,30 @@ const MainApp: React.FC = () => {
       }
   }, [loading, sessionToken, verifySession, handleLogout]);
 
-  // STAGE 2B: Hide splash screen once initial loading is done
+  // Hide splash screen once initial loading is done
   useEffect(() => {
     if (!loading && !isVerifying) {
       hideSplashScreen();
     }
   }, [loading, isVerifying]);
 
-  // STAGE 2B: Hardware back button handler
+  // Hardware back button handler
   useEffect(() => {
     const handleBack = (): boolean => {
-      // If on AUTH screen, allow exit
-      if (currentScreen === Screen.AUTH) {
-        return false; // Not handled - app will exit
-      }
-      
-      // If on DASHBOARD, allow exit
-      if (currentScreen === Screen.DASHBOARD) {
-        return false; // Not handled - app will exit
-      }
-      
-      // Otherwise, navigate back to dashboard
+      if (currentScreen === Screen.AUTH) return false;
+      if (currentScreen === Screen.DASHBOARD) return false;
       setCurrentScreen(Screen.DASHBOARD);
-      return true; // Handled
+      return true;
     };
     
     const cleanup = setupBackButtonHandler(handleBack);
     return cleanup;
   }, [currentScreen]);
+
+  // Force update modal blocks everything else
+  if (forceUpdateInfo) {
+    return <ForceUpdateModal result={forceUpdateInfo} />;
+  }
 
   // Loading state
   if (loading || isVerifying) {
@@ -203,7 +299,6 @@ const MainApp: React.FC = () => {
     }
   };
 
-  // STAGE 2B: Offline banner overlay (shown across all screens)
   const offlineBanner = !isOnline && (
     <div className="fixed top-0 left-0 right-0 z-[200] bg-orange-500 text-white text-center py-2 px-4 text-sm font-bold shadow-lg flex items-center justify-center gap-2 animate-fade-in-down">
       <WifiOff className="w-4 h-4" />
@@ -292,9 +387,11 @@ const MainApp: React.FC = () => {
 
 const App: React.FC = () => {
     return (
-        <AppProvider>
-            <MainApp />
-        </AppProvider>
+        <ErrorBoundary>
+            <AppProvider>
+                <MainApp />
+            </AppProvider>
+        </ErrorBoundary>
     );
 };
 

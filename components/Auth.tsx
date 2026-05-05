@@ -14,20 +14,16 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [view, setView] = useState<AuthView>('landing');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Login Form State
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   
-  // Password Reset State
   const [resetEmail, setResetEmail] = useState('');
   const [resetOtp, setResetOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
-  // Signup Verification State
   const [signupOtp, setSignupOtp] = useState('');
 
-  // Validation & Form State
   const [signupData, setSignupData] = useState({
       role: UserRole.HOUSEHOLD,
       fullName: '',
@@ -39,6 +35,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       password: '',
       confirmPassword: ''
   });
+  // STAGE 2C: Track ToS acceptance
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -65,6 +63,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       setValidationError('');
       setSuccessMessage('');
       setShowPassword(false);
+      setAcceptedTerms(false);
       setView(targetView);
       setIsSubmitting(false);
   };
@@ -148,6 +147,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const handleSignupSubmit = async (e: React.FormEvent, role: UserRole) => {
     e.preventDefault();
     setValidationError('');
+
+    // STAGE 2C: ToS acceptance gate
+    if (!acceptedTerms) {
+        setValidationError("You must accept the Terms of Service and Privacy Policy.");
+        return;
+    }
+
     setIsSubmitting(true);
 
     if (sysConfig.maintenanceMode) {
@@ -222,7 +228,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       };
 
       try {
-          await registerUser(newUser, signupData.password, signupOtp);
+          // STAGE 2C: Pass acceptedTerms - server validates it
+          await registerUser(newUser, signupData.password, signupOtp, acceptedTerms);
           setSuccessMessage("Registration successful! Logging you in...");
           setTimeout(() => {
               resetForm('login');
@@ -287,6 +294,15 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
          >
             Log In
          </button>
+      </div>
+
+      {/* STAGE 2C: Footer links to legal pages */}
+      <div className="mt-8 pt-4 border-t border-white/10 text-center">
+        <p className="text-white/60 text-[11px]">
+          <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="underline hover:text-white">Privacy Policy</a>
+          <span className="mx-2">·</span>
+          <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="underline hover:text-white">Terms of Service</a>
+        </p>
       </div>
     </div>
   );
@@ -433,12 +449,34 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     required 
                 />
             </div>
+
+            {/* STAGE 2C: Terms acceptance checkbox */}
+            <div className="pt-2">
+                <label className="flex items-start gap-3 cursor-pointer">
+                    <input 
+                        type="checkbox"
+                        checked={acceptedTerms}
+                        onChange={(e) => setAcceptedTerms(e.target.checked)}
+                        className="mt-1 w-4 h-4 rounded accent-white shrink-0"
+                    />
+                    <span className="text-xs text-green-100 leading-relaxed">
+                        I am 18+ years old and I agree to the{' '}
+                        <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="underline font-bold text-white hover:text-green-200">
+                            Terms of Service
+                        </a>{' '}
+                        and{' '}
+                        <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="underline font-bold text-white hover:text-green-200">
+                            Privacy Policy
+                        </a>.
+                    </span>
+                </label>
+            </div>
         </div>
 
         <button 
             type="submit"
-            disabled={isSubmitting}
-            className="w-full bg-white text-green-800 py-3 rounded-xl font-bold shadow-lg hover:bg-green-50 transition-transform active:scale-95 mt-6 disabled:opacity-70 disabled:active:scale-100"
+            disabled={isSubmitting || !acceptedTerms}
+            className="w-full bg-white text-green-800 py-3 rounded-xl font-bold shadow-lg hover:bg-green-50 transition-transform active:scale-95 mt-6 disabled:opacity-50 disabled:active:scale-100 disabled:cursor-not-allowed"
         >
             {isSubmitting ? 'Sending Code...' : 'Send Verification Code'}
         </button>
