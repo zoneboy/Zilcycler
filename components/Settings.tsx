@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Share } from '@capacitor/share';
 import { User, UserRole } from '../types';
 import { useApp } from '../context/AppContext';
-import { getToken } from '../utils/storage';
-import { API_BASE_URL } from '../constants';
-import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, ArrowLeft, Save, Lock, Eye, EyeOff, Globe, Trash2, AlertTriangle, Landmark, Camera, KeyRound, Loader2, Phone, Mail, Headphones, Share2 } from 'lucide-react';
+import { captureImage, pickImageFromInput, uploadToCloudinary } from '../utils/imageUpload';
+import { isNative } from '../utils/native';
+import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, ArrowLeft, Save, Lock, Eye, EyeOff, Globe, Trash2, AlertTriangle, Landmark, Camera, Loader2, Phone, Mail, Headphones, Share2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -11,19 +12,6 @@ interface Props {
 }
 
 type SettingsView = 'MAIN' | 'ACCOUNT' | 'PRIVACY' | 'SUPPORT';
-
-const validateImage = (file: File) => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-  const maxSize = 5 * 1024 * 1024;
-
-  if (!allowedTypes.includes(file.type)) {
-    throw new Error('Invalid file type. Only JPEG, PNG, and WebP are allowed.');
-  }
-  
-  if (file.size > maxSize) {
-    throw new Error('File too large. Maximum size is 5MB.');
-  }
-};
 
 const Settings: React.FC<Props> = ({ user, onLogout }) => {
   const { updateUser, initiateChangePassword, confirmChangePassword } = useApp();
@@ -73,113 +61,96 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     localStorage.setItem('darkMode', String(darkMode));
   }, [darkMode]);
 
-  const uploadToCloudinary = async (file: File): Promise<string | null> => {
-      try {
-          const token = await getToken();
-          if (!token) {
-              alert("You must be logged in to upload images.");
-              return null;
-          }
-
-          const signRes = await fetch(`${API_BASE_URL}/auth/sign-upload`, {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({ folder: 'zilcycler_avatars' })
-          });
-
-          if (!signRes.ok) {
-              throw new Error('Failed to sign upload request.');
-          }
-
-          const { signature, timestamp, apiKey, cloudName, folder } = await signRes.json();
-
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('api_key', apiKey);
-          formData.append('timestamp', timestamp.toString());
-          formData.append('signature', signature);
-          formData.append('folder', folder);
-
-          const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-              method: 'POST',
-              body: formData
-          });
-
-          if (!uploadRes.ok) {
-              const errorData = await uploadRes.json();
-              throw new Error(errorData.error?.message || 'Upload failed');
-          }
-
-          const data = await uploadRes.json();
-          return data.secure_url;
-      } catch (error) {
-          console.error("Cloudinary Upload Error:", error);
-          alert("Failed to upload image. Please check your internet connection or try again.");
-          return null;
+  const handleAvatarPick = async () => {
+    if (isUploadingAvatar) return;
+    
+    try {
+      let captured = null;
+      
+      if (isNative()) {
+        captured = await captureImage();
+      } else if (fileInputRef.current) {
+        captured = await pickImageFromInput(fileInputRef.current);
       }
-  };
-
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      try {
-        validateImage(file);
-      } catch (err: any) {
-        alert(err.message);
-        e.target.value = '';
-        return;
-      }
-
+      
+      if (!captured) return;
+      
       setIsUploadingAvatar(true);
-      const url = await uploadToCloudinary(file);
+      const url = await uploadToCloudinary(captured.file, 'zilcycler_avatars');
       setIsUploadingAvatar(false);
 
       if (url) {
         setFormData({ ...formData, avatar: url });
       }
+    } catch (err: any) {
+      setIsUploadingAvatar(false);
+      alert(err.message || 'Failed to load image');
     }
   };
 
-  const handleSaveAccount = (e: React.FormEvent) => {
+  const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     
-    updateUser(user.id, {
-        name: formData.name,
-        phone: formData.phone,
-        gender: formData.gender,
-        address: formData.address,
-        avatar: formData.avatar,
-        bankDetails: {
-            bankName: formData.bankName,
-            accountNumber: formData.accountNumber,
-            accountName: formData.accountName
-        }
-    });
-
-    setTimeout(() => {
-        setIsSaving(false);
-        alert("Profile updated successfully!");
-        setCurrentView('MAIN');
-    }, 1500);
+    try {
+      await updateUser(user.id, {
+          name: formData.name,
+          phone: formData.phone,
+          gender: formData.gender,
+          address: formData.address,
+          avatar: formData.avatar,
+          bankDetails: {
+              bankName: formData.bankName,
+              accountNumber: formData.accountNumber,
+              accountName: formData.accountName
+          }
+      });
+      setIsSaving(false);
+      alert("Profile updated successfully!");
+      setCurrentView('MAIN');
+    } catch (err: any) {
+      setIsSaving(false);
+      alert(err.message || "Failed to save profile.");
+    }
   };
 
   const handleShareApp = async () => {
-    if (navigator.share) {
-        try {
-            await navigator.share({
-                title: 'Zilcycler',
-                text: 'Join me on Zilcycler to recycle and earn rewards!',
-                url: window.location.origin
+    const shareData = {
+        title: 'Zilcycler',
+        text: 'Join me on Zilcycler to recycle and earn rewards!',
+        url: typeof window !== 'undefined' ? window.location.origin : 'https://zilcycler.netlify.app',
+    };
+    
+    try {
+        // Native: Use Capacitor Share for native share sheet
+        if (isNative()) {
+            await Share.share({
+                title: shareData.title,
+                text: shareData.text,
+                url: shareData.url,
+                dialogTitle: 'Share Zilcycler with friends',
             });
-        } catch (error) {
-            console.log('Error sharing', error);
+            return;
         }
-    } else {
-        alert("Sharing is not supported on this browser/device.");
+        
+        // Web: Use Web Share API if available
+        if (typeof navigator !== 'undefined' && navigator.share) {
+            await navigator.share(shareData);
+            return;
+        }
+        
+        // Web fallback: copy URL
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+            await navigator.clipboard.writeText(shareData.url);
+            alert('Link copied to clipboard!');
+        } else {
+            alert('Sharing is not supported on this device.');
+        }
+    } catch (error: any) {
+        // User cancellation is normal, don't show error
+        if (error.message && !error.message.toLowerCase().includes('cancel')) {
+            console.error('Share error:', error);
+        }
     }
   };
 
@@ -380,7 +351,7 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
 
         <form onSubmit={handleSaveAccount} className="space-y-4">
              <div className="flex flex-col items-center mb-6">
-                 <div className="relative group cursor-pointer" onClick={() => !isUploadingAvatar && fileInputRef.current?.click()}>
+                 <div className="relative group cursor-pointer" onClick={handleAvatarPick}>
                     {isUploadingAvatar ? (
                         <div className="w-24 h-24 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center border-4 border-white dark:border-gray-800 shadow-lg">
                             <Loader2 className="w-8 h-8 animate-spin text-green-600" />
@@ -402,12 +373,11 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
                         ref={fileInputRef} 
                         className="hidden" 
                         accept="image/*" 
-                        onChange={handleImageChange} 
                         disabled={isUploadingAvatar}
                     />
                  </div>
                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                     {isUploadingAvatar ? 'Uploading...' : 'Tap to change photo'}
+                     {isUploadingAvatar ? 'Uploading...' : `Tap to ${isNative() ? 'change photo' : 'change photo'}`}
                  </p>
              </div>
 

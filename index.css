@@ -17,14 +17,18 @@
     padding-bottom: env(safe-area-inset-bottom, 20px);
   }
   
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  
   /* Hide scrollbar for Chrome, Safari and Opera */
   .no-scrollbar::-webkit-scrollbar {
       display: none;
   }
   /* Hide scrollbar for IE, Edge and Firefox */
   .no-scrollbar {
-      -ms-overflow-style: none;  /* IE and Edge */
-      scrollbar-width: none;  /* Firefox */
+      -ms-overflow-style: none;
+      scrollbar-width: none;
   }
 }
 
@@ -43,5 +47,28 @@
 }
 
 .animate-fade-in-up { animation: fade-in-up 0.6s ease-out forwards; }
-.animate-fade-in-down { animation: fade-in-down 0.6s ease-out forwards; }
+.animate-fade-in-down { animation: fade-in-down 0.4s ease-out forwards; }
 .animate-fade-in { animation: fade-in 0.4s ease-out forwards; }
+
+/* Disable text selection on UI elements (mobile-friendly) */
+button, nav, [role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smoother momentum scrolling on iOS/Android WebView */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent zoom on input focus on iOS (must be 16px+) */
+input, textarea, select {
+  font-size: 16px;
+}
+
+@media (min-width: 768px) {
+  input, textarea, select {
+    font-size: 14px;
+  }
+}

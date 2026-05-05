@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Geolocation } from '@capacitor/geolocation';
+import { Capacitor } from '@capacitor/core';
 import { MapPin, Navigation, Clock, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -10,56 +12,117 @@ const DropOffLocations: React.FC = () => {
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [isLocating, setIsLocating] = useState(true);
 
+  const isNative = Capacitor.isNativePlatform();
+
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setLocationStatus('GPS not supported');
-      setIsLocating(false);
-      return;
-    }
+    let watchId: string | null = null;
+    let webWatchId: number | null = null;
 
-    // Use watchPosition to get continuous updates as GPS accuracy improves
-    const watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        setUserCoords({ 
-            lat: position.coords.latitude, 
-            lng: position.coords.longitude 
-        });
-        setLocationStatus('');
-        setIsLocating(false);
-        setPermissionDenied(false);
-      },
-      (error) => {
-        console.error("Error watching location", error);
-        // Only set error state if we haven't received any coordinates yet
-        setUserCoords(prev => {
-            if (!prev) {
-                setLocationStatus('GPS access denied');
-                setPermissionDenied(true);
+    const startWatching = async () => {
+      try {
+        // Native: use Capacitor Geolocation
+        if (isNative) {
+          // Request permission first
+          const permResult = await Geolocation.requestPermissions();
+          if (permResult.location !== 'granted' && permResult.coarseLocation !== 'granted') {
+            setLocationStatus('GPS access denied');
+            setPermissionDenied(true);
+            setIsLocating(false);
+            return;
+          }
+
+          watchId = await Geolocation.watchPosition(
+            { 
+              enableHighAccuracy: true, 
+              timeout: 20000, 
+              maximumAge: 1000 
+            },
+            (position, err) => {
+              if (err) {
+                console.error('Watch position error:', err);
+                setUserCoords(prev => {
+                    if (!prev) {
+                        setLocationStatus('GPS access denied');
+                        setPermissionDenied(true);
+                    }
+                    return prev;
+                });
+                setIsLocating(false);
+                return;
+              }
+              if (position) {
+                setUserCoords({
+                  lat: position.coords.latitude,
+                  lng: position.coords.longitude,
+                });
+                setLocationStatus('');
+                setIsLocating(false);
+                setPermissionDenied(false);
+              }
             }
-            return prev;
-        });
+          );
+        } 
+        // Web: use browser geolocation
+        else {
+          if (!navigator.geolocation) {
+            setLocationStatus('GPS not supported');
+            setIsLocating(false);
+            return;
+          }
+
+          webWatchId = navigator.geolocation.watchPosition(
+            (position) => {
+              setUserCoords({ 
+                  lat: position.coords.latitude, 
+                  lng: position.coords.longitude 
+              });
+              setLocationStatus('');
+              setIsLocating(false);
+              setPermissionDenied(false);
+            },
+            (error) => {
+              console.error("Error watching location", error);
+              setUserCoords(prev => {
+                  if (!prev) {
+                      setLocationStatus('GPS access denied');
+                      setPermissionDenied(true);
+                  }
+                  return prev;
+              });
+              setIsLocating(false);
+            },
+            { 
+              enableHighAccuracy: true, 
+              timeout: 20000, 
+              maximumAge: 1000 
+            }
+          );
+        }
+      } catch (err) {
+        console.error('Geolocation init error:', err);
+        setLocationStatus('GPS unavailable');
         setIsLocating(false);
-      },
-      { 
-        enableHighAccuracy: true, 
-        timeout: 20000, 
-        maximumAge: 1000 
       }
-    );
+    };
 
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+    startWatching();
 
-  // Calculate distances whenever coords or locations change
+    return () => {
+      if (watchId) {
+        Geolocation.clearWatch({ id: watchId }).catch(() => {});
+      }
+      if (webWatchId !== null) {
+        navigator.geolocation.clearWatch(webWatchId);
+      }
+    };
+  }, [isNative]);
+
+  // Calculate distances
   useEffect(() => {
     if (userCoords && dropOffLocations.length > 0) {
         const newDistances: {[key: string]: string} = {};
         dropOffLocations.forEach(loc => {
-          // 1. Calculate straight-line distance
           const straightLineKm = getDistanceFromLatLonInKm(userCoords.lat, userCoords.lng, loc.lat, loc.lng);
-          
-          // 2. Apply "Tortuosity Factor" (approx 1.4x) to estimate actual driving distance 
-          // (Straight line is usually ~70% of road distance in cities)
           const estimatedDrivingKm = straightLineKm * 1.4;
 
           newDistances[loc.id] = estimatedDrivingKm < 1 
@@ -71,7 +134,7 @@ const DropOffLocations: React.FC = () => {
   }, [userCoords, dropOffLocations]);
 
   const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; // Radius of the earth in km
+    const R = 6371;
     const dLat = deg2rad(lat2 - lat1);
     const dLon = deg2rad(lon2 - lon1);
     const a =
@@ -79,40 +142,53 @@ const DropOffLocations: React.FC = () => {
       Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
       Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // Distance in km
+    return R * c;
   };
 
-  const deg2rad = (deg: number) => {
-    return deg * (Math.PI / 180);
-  };
+  const deg2rad = (deg: number) => deg * (Math.PI / 180);
 
   const handleDirections = (lat: number, lng: number) => {
     if (userCoords) {
-        // Construct dynamic Google Maps Directions URL
         const url = `https://www.google.com/maps/dir/?api=1&origin=${userCoords.lat},${userCoords.lng}&destination=${lat},${lng}&travelmode=driving`;
         window.open(url, '_blank');
     } else {
-        // Fallback to searching the location coordinates if user location is unknown
         const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
         window.open(url, '_blank');
     }
   };
 
-  const handleManualRefresh = () => {
+  const handleManualRefresh = async () => {
       setIsLocating(true);
       setLocationStatus('Refreshing...');
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-            setUserCoords({ 
-                lat: position.coords.latitude, 
-                lng: position.coords.longitude 
-            });
-            setIsLocating(false);
-            setLocationStatus('');
-        },
-        () => setIsLocating(false),
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
+      
+      try {
+        if (isNative) {
+          const position = await Geolocation.getCurrentPosition({ 
+            enableHighAccuracy: true, 
+            timeout: 10000 
+          });
+          setUserCoords({ 
+              lat: position.coords.latitude, 
+              lng: position.coords.longitude 
+          });
+        } else {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+                setUserCoords({ 
+                    lat: position.coords.latitude, 
+                    lng: position.coords.longitude 
+                });
+            },
+            (err) => console.error('Manual refresh error:', err),
+            { enableHighAccuracy: true, timeout: 10000 }
+          );
+        }
+      } catch (err) {
+        console.error('Manual refresh error:', err);
+      } finally {
+        setIsLocating(false);
+        setLocationStatus('');
+      }
   };
 
   return (

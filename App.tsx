@@ -1,7 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { User, UserRole, Screen } from './types';
 import { AppProvider, useApp } from './context/AppContext';
 import { getToken, setToken, removeToken } from './utils/storage';
+import { 
+    initStatusBar, 
+    hideSplashScreen, 
+    setupBackButtonHandler, 
+    onNetworkChange,
+    getNetworkStatus,
+    isNative,
+} from './utils/native';
 import Auth from './components/Auth';
 import DashboardHousehold from './components/DashboardHousehold';
 import DashboardCollector from './components/DashboardCollector';
@@ -16,7 +24,7 @@ import MessagesWithUser from './components/Messages';
 import WalletScreen from './components/WalletScreen';
 import PickupHistory from './components/PickupHistory';
 import Certificates from './components/Certificates';
-import { Home, FileText, Settings as SettingsIcon, LogOut, ArrowLeft, Wallet } from 'lucide-react';
+import { Home, FileText, Settings as SettingsIcon, LogOut, ArrowLeft, Wallet, WifiOff } from 'lucide-react';
 
 // Helper function to check token expiry (Basic JWT check)
 const isTokenExpired = (token: string): boolean => {
@@ -24,31 +32,45 @@ const isTokenExpired = (token: string): boolean => {
     const payload = JSON.parse(atob(token.split('.')[1]));
     return Date.now() >= payload.exp * 1000;
   } catch (e) {
-    return true; // Treat invalid tokens as expired
+    return true;
   }
 };
 
 const MainApp: React.FC = () => {
   const { users, loading, verifySession } = useApp();
   
-  // Token state - now loaded asynchronously from storage
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
-  
-  // Set initial screen
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.AUTH);
-  
-  // Track if we are still loading the token from storage on app startup
   const [isVerifying, setIsVerifying] = useState(true);
+  const [isOnline, setIsOnline] = useState(true);
 
-  // STAGE 2A: Async token retrieval on app startup
+  // STAGE 2B: Initialize native plugins on mount
+  useEffect(() => {
+    const initNative = async () => {
+      await initStatusBar();
+      
+      // Check initial network state
+      const status = await getNetworkStatus();
+      setIsOnline(status.connected);
+    };
+    initNative();
+    
+    // Listen for network changes
+    const cleanup = onNetworkChange((connected) => {
+      setIsOnline(connected);
+    });
+    
+    return cleanup;
+  }, []);
+
+  // STAGE 2B: Async token retrieval
   useEffect(() => {
     const loadToken = async () => {
       const token = await getToken();
       if (token && !isTokenExpired(token)) {
         setSessionToken(token);
       } else if (token) {
-        // Token exists but expired - clean it up
         await removeToken();
       }
     };
@@ -62,14 +84,14 @@ const MainApp: React.FC = () => {
     setCurrentScreen(Screen.DASHBOARD);
   };
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await removeToken();
     setSessionToken(null);
     setSessionUserId(null);
     setCurrentScreen(Screen.AUTH);
-  };
+  }, []);
 
-  // Validate session when app loads
+  // Validate session
   useEffect(() => {
       const restoreSession = async () => {
           if (!sessionToken) {
@@ -92,9 +114,38 @@ const MainApp: React.FC = () => {
       if (!loading) {
           restoreSession();
       }
-  }, [loading, sessionToken]);
+  }, [loading, sessionToken, verifySession, handleLogout]);
 
-  // Loading state (Global Data Loading OR Session Verification)
+  // STAGE 2B: Hide splash screen once initial loading is done
+  useEffect(() => {
+    if (!loading && !isVerifying) {
+      hideSplashScreen();
+    }
+  }, [loading, isVerifying]);
+
+  // STAGE 2B: Hardware back button handler
+  useEffect(() => {
+    const handleBack = (): boolean => {
+      // If on AUTH screen, allow exit
+      if (currentScreen === Screen.AUTH) {
+        return false; // Not handled - app will exit
+      }
+      
+      // If on DASHBOARD, allow exit
+      if (currentScreen === Screen.DASHBOARD) {
+        return false; // Not handled - app will exit
+      }
+      
+      // Otherwise, navigate back to dashboard
+      setCurrentScreen(Screen.DASHBOARD);
+      return true; // Handled
+    };
+    
+    const cleanup = setupBackButtonHandler(handleBack);
+    return cleanup;
+  }, [currentScreen]);
+
+  // Loading state
   if (loading || isVerifying) {
        return (
         <div className="h-screen w-full flex flex-col items-center justify-center text-green-800 bg-gray-50 dark:bg-gray-900">
@@ -104,7 +155,6 @@ const MainApp: React.FC = () => {
       );
   }
 
-  // Get live user data from context with defensive check
   const currentUser = users.find(u => u && u.id === sessionUserId) || null;
 
   const renderScreen = () => {
@@ -153,67 +203,90 @@ const MainApp: React.FC = () => {
     }
   };
 
+  // STAGE 2B: Offline banner overlay (shown across all screens)
+  const offlineBanner = !isOnline && (
+    <div className="fixed top-0 left-0 right-0 z-[200] bg-orange-500 text-white text-center py-2 px-4 text-sm font-bold shadow-lg flex items-center justify-center gap-2 animate-fade-in-down">
+      <WifiOff className="w-4 h-4" />
+      <span>You're offline. Some features may not work.</span>
+    </div>
+  );
+
   if (currentScreen === Screen.AUTH) {
-    return <Auth onLogin={handleLogin} />;
+    return (
+      <>
+        {offlineBanner}
+        <Auth onLogin={handleLogin} />
+      </>
+    );
   }
   
-  if (!currentUser) return <Auth onLogin={handleLogin} />;
+  if (!currentUser) {
+    return (
+      <>
+        {offlineBanner}
+        <Auth onLogin={handleLogin} />
+      </>
+    );
+  }
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 min-h-screen flex justify-center font-sans text-gray-900 dark:text-gray-100 transition-colors duration-300">
-      <div className="w-full max-w-md bg-white dark:bg-gray-900 min-h-screen shadow-2xl relative flex flex-col transition-colors duration-300">
-        
-        {currentScreen !== Screen.DASHBOARD && (
-             <div className="p-4 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 sticky top-0 z-20 transition-colors duration-300">
-                 <button onClick={() => setCurrentScreen(Screen.DASHBOARD)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
-                     <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-                 </button>
-                 <span className="font-bold text-lg capitalize text-gray-900 dark:text-white">{currentScreen.toLowerCase().replace('_', ' ')}</span>
-             </div>
-        )}
+    <>
+      {offlineBanner}
+      <div className={`bg-gray-50 dark:bg-gray-900 min-h-screen flex justify-center font-sans text-gray-900 dark:text-gray-100 transition-colors duration-300 ${!isOnline ? 'pt-10' : ''}`}>
+        <div className="w-full max-w-md bg-white dark:bg-gray-900 min-h-screen shadow-2xl relative flex flex-col transition-colors duration-300">
+          
+          {currentScreen !== Screen.DASHBOARD && (
+              <div className="p-4 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 sticky top-0 z-20 transition-colors duration-300">
+                  <button onClick={() => setCurrentScreen(Screen.DASHBOARD)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
+                      <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                  </button>
+                  <span className="font-bold text-lg capitalize text-gray-900 dark:text-white">{currentScreen.toLowerCase().replace('_', ' ')}</span>
+              </div>
+          )}
 
-        <main className="flex-1 p-6 overflow-y-auto scroll-smooth">
-          {renderScreen()}
-        </main>
+          <main className="flex-1 p-6 overflow-y-auto scroll-smooth">
+            {renderScreen()}
+          </main>
 
-        {(currentUser.role === UserRole.HOUSEHOLD || currentUser.role === UserRole.ORGANIZATION) && (
-          <nav className="sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 py-3 px-6 flex justify-between items-center z-30 pb-safe transition-colors duration-300">
-            <button 
-              onClick={() => setCurrentScreen(Screen.DASHBOARD)} 
-              className={`flex flex-col items-center gap-1 ${currentScreen === Screen.DASHBOARD ? 'text-green-700 dark:text-green-500' : 'text-gray-400 dark:text-gray-500'}`}
-            >
-              <Home className="w-6 h-6" />
-              <span className="text-[10px] font-bold">Home</span>
-            </button>
-            <button 
-              onClick={() => setCurrentScreen(Screen.BLOG)}
-              className={`flex flex-col items-center gap-1 ${currentScreen === Screen.BLOG ? 'text-green-700 dark:text-green-500' : 'text-gray-400 dark:text-gray-500'}`}
-            >
-              <FileText className="w-6 h-6" />
-              <span className="text-[10px] font-bold">Tips</span>
-            </button>
-            <button 
-              onClick={() => setCurrentScreen(Screen.WALLET)}
-              className={`flex flex-col items-center gap-1 ${currentScreen === Screen.WALLET ? 'text-green-700 dark:text-green-500' : 'text-gray-400 dark:text-gray-500'}`}
-            >
-              <Wallet className="w-6 h-6" />
-              <span className="text-[10px] font-bold">Wallet</span>
-            </button>
-            <button 
-              onClick={() => setCurrentScreen(Screen.SETTINGS)}
-              className={`flex flex-col items-center gap-1 ${currentScreen === Screen.SETTINGS ? 'text-green-700 dark:text-green-500' : 'text-gray-400 dark:text-gray-500'}`}
-            >
-              <SettingsIcon className="w-6 h-6" />
-              <span className="text-[10px] font-bold">Settings</span>
-            </button>
-            <button onClick={handleLogout} className="flex flex-col items-center gap-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400">
-              <LogOut className="w-6 h-6" />
-              <span className="text-[10px] font-bold">Logout</span>
-            </button>
-          </nav>
-        )}
+          {(currentUser.role === UserRole.HOUSEHOLD || currentUser.role === UserRole.ORGANIZATION) && (
+            <nav className="sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 py-3 px-6 flex justify-between items-center z-30 pb-safe transition-colors duration-300">
+              <button 
+                onClick={() => setCurrentScreen(Screen.DASHBOARD)} 
+                className={`flex flex-col items-center gap-1 ${currentScreen === Screen.DASHBOARD ? 'text-green-700 dark:text-green-500' : 'text-gray-400 dark:text-gray-500'}`}
+              >
+                <Home className="w-6 h-6" />
+                <span className="text-[10px] font-bold">Home</span>
+              </button>
+              <button 
+                onClick={() => setCurrentScreen(Screen.BLOG)}
+                className={`flex flex-col items-center gap-1 ${currentScreen === Screen.BLOG ? 'text-green-700 dark:text-green-500' : 'text-gray-400 dark:text-gray-500'}`}
+              >
+                <FileText className="w-6 h-6" />
+                <span className="text-[10px] font-bold">Tips</span>
+              </button>
+              <button 
+                onClick={() => setCurrentScreen(Screen.WALLET)}
+                className={`flex flex-col items-center gap-1 ${currentScreen === Screen.WALLET ? 'text-green-700 dark:text-green-500' : 'text-gray-400 dark:text-gray-500'}`}
+              >
+                <Wallet className="w-6 h-6" />
+                <span className="text-[10px] font-bold">Wallet</span>
+              </button>
+              <button 
+                onClick={() => setCurrentScreen(Screen.SETTINGS)}
+                className={`flex flex-col items-center gap-1 ${currentScreen === Screen.SETTINGS ? 'text-green-700 dark:text-green-500' : 'text-gray-400 dark:text-gray-500'}`}
+              >
+                <SettingsIcon className="w-6 h-6" />
+                <span className="text-[10px] font-bold">Settings</span>
+              </button>
+              <button onClick={handleLogout} className="flex flex-col items-center gap-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400">
+                <LogOut className="w-6 h-6" />
+                <span className="text-[10px] font-bold">Logout</span>
+              </button>
+            </nav>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

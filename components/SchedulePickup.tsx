@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { User, PickupTask } from '../types';
 import { Calendar, Clock, Camera, MapPin, CheckCircle, Phone, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { getToken } from '../utils/storage';
-import { API_BASE_URL } from '../constants';
+import { captureImage, pickImageFromInput, uploadToCloudinary, CapturedImage } from '../utils/imageUpload';
+import { isNative } from '../utils/native';
 
 interface SchedulePickupProps {
   user: User;
@@ -11,27 +11,13 @@ interface SchedulePickupProps {
   onSubmit: () => void;
 }
 
-const validateImage = (file: File) => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-  const maxSize = 5 * 1024 * 1024; // 5MB
-
-  if (!allowedTypes.includes(file.type)) {
-    throw new Error('Invalid file type. Only JPEG, PNG, and WebP are allowed.');
-  }
-  
-  if (file.size > maxSize) {
-    throw new Error('File too large. Maximum size is 5MB.');
-  }
-};
-
 const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit }) => {
   const { schedulePickup } = useApp();
   const [success, setSuccess] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [wasteFile, setWasteFile] = useState<File | null>(null);
-  const [previewImage, setPreviewImage] = useState<string | undefined>(undefined);
+  const [capturedImage, setCapturedImage] = useState<CapturedImage | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   
@@ -48,76 +34,29 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-
-      try {
-        validateImage(file);
-      } catch (err: any) {
-        alert(err.message);
-        e.target.value = '';
+  const handleImagePick = async () => {
+    if (isUploading) return;
+    
+    try {
+      // Try native camera/gallery picker first
+      if (isNative()) {
+        const result = await captureImage();
+        if (result) {
+          setCapturedImage(result);
+        }
         return;
       }
-
-      setFileName(file.name);
-      setWasteFile(file);
       
-      const reader = new FileReader();
-      reader.onloadend = () => {
-          setPreviewImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const uploadToCloudinary = async (file: File): Promise<string | null> => {
-      try {
-          const token = await getToken();
-          if (!token) {
-              alert("You must be logged in to upload images.");
-              return null;
-          }
-
-          const signRes = await fetch(`${API_BASE_URL}/auth/sign-upload`, {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({ folder: 'zilcycler_pickups' })
-          });
-
-          if (!signRes.ok) {
-              throw new Error('Failed to sign upload request.');
-          }
-
-          const { signature, timestamp, apiKey, cloudName, folder } = await signRes.json();
-
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('api_key', apiKey);
-          formData.append('timestamp', timestamp.toString());
-          formData.append('signature', signature);
-          formData.append('folder', folder);
-
-          const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-              method: 'POST',
-              body: formData
-          });
-
-          if (!uploadRes.ok) {
-              const errorData = await uploadRes.json();
-              throw new Error(errorData.error?.message || 'Upload failed');
-          }
-
-          const data = await uploadRes.json();
-          return data.secure_url;
-      } catch (error) {
-          console.error("Cloudinary Upload Error:", error);
-          alert("Failed to upload image. Please check your internet connection or try again.");
-          return null;
+      // Web: trigger hidden file input
+      if (fileInputRef.current) {
+        const result = await pickImageFromInput(fileInputRef.current);
+        if (result) {
+          setCapturedImage(result);
+        }
       }
+    } catch (err: any) {
+      alert(err.message || 'Failed to load image');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -128,10 +67,10 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
     }
 
     setIsUploading(true);
-    let finalImageUrl = undefined;
+    let finalImageUrl: string | undefined = undefined;
 
-    if (wasteFile) {
-        const url = await uploadToCloudinary(wasteFile);
+    if (capturedImage) {
+        const url = await uploadToCloudinary(capturedImage.file, 'zilcycler_pickups');
         if (!url) {
             setIsUploading(false);
             return;
@@ -152,11 +91,15 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
         wasteImage: finalImageUrl
     };
 
-    await schedulePickup(newTask);
-
-    setIsUploading(false);
-    setSuccess(true);
-    setTimeout(onSubmit, 2500);
+    try {
+      await schedulePickup(newTask);
+      setIsUploading(false);
+      setSuccess(true);
+      setTimeout(onSubmit, 2500);
+    } catch (err: any) {
+      setIsUploading(false);
+      alert(err.message || 'Failed to schedule pickup');
+    }
   };
 
   if (success) {
@@ -270,32 +213,32 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
 
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <label className="block text-sm font-medium text-gray-700 mb-2">Photo of Waste (Optional)</label>
-          <div className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${fileName ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:bg-gray-50'}`}>
+          <div 
+            onClick={handleImagePick}
+            className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${capturedImage ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:bg-gray-50'} ${isUploading ? 'pointer-events-none opacity-50' : ''}`}
+          >
             <input 
                 type="file" 
-                id="waste-image" 
+                ref={fileInputRef}
                 className="hidden" 
                 accept="image/*" 
-                onChange={handleFileChange} 
                 disabled={isUploading}
             />
-            <label htmlFor="waste-image" className={`cursor-pointer flex flex-col items-center w-full h-full ${isUploading ? 'pointer-events-none opacity-50' : ''}`}>
-              {fileName ? (
-                  <>
-                     <div className="relative">
-                        {previewImage && <img src={previewImage} alt="Preview" className="w-20 h-20 rounded-lg object-cover mb-2 border border-green-200" />}
-                        <CheckCircle className="w-6 h-6 text-green-500 absolute -top-2 -right-2 bg-white rounded-full" />
-                     </div>
-                     <span className="text-sm font-bold text-green-700 break-all">{fileName}</span>
-                     <span className="text-xs text-green-600 mt-1">Tap to change</span>
-                  </>
-              ) : (
-                  <>
-                    <Camera className="w-8 h-8 text-gray-400 mb-2" />
-                    <span className="text-sm text-gray-500">Tap to upload image</span>
-                  </>
-              )}
-            </label>
+            {capturedImage ? (
+                <div className="flex flex-col items-center">
+                   <div className="relative">
+                      <img src={capturedImage.previewUrl} alt="Preview" className="w-20 h-20 rounded-lg object-cover mb-2 border border-green-200" />
+                      <CheckCircle className="w-6 h-6 text-green-500 absolute -top-2 -right-2 bg-white rounded-full" />
+                   </div>
+                   <span className="text-sm font-bold text-green-700 break-all">Image ready</span>
+                   <span className="text-xs text-green-600 mt-1">Tap to change</span>
+                </div>
+            ) : (
+                <div className="flex flex-col items-center">
+                  <Camera className="w-8 h-8 text-gray-400 mb-2" />
+                  <span className="text-sm text-gray-500">Tap to {isNative() ? 'take photo or pick from gallery' : 'upload image'}</span>
+                </div>
+            )}
           </div>
         </div>
 
