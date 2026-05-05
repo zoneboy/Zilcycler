@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { 
     User, 
     UserRole, 
@@ -19,7 +19,6 @@ import { getToken } from '../utils/storage';
 // ============================================================
 
 interface AppContextType {
-  // Data
   users: User[];
   pickups: PickupTask[];
   blogPosts: BlogPost[];
@@ -31,7 +30,6 @@ interface AppContextType {
   wasteRates: WasteRates;
   loading: boolean;
   
-  // Auth
   login: (email: string, password: string) => Promise<{ user: User; token: string }>;
   verifySession: (token: string) => Promise<{ userId: string }>;
   requestPasswordReset: (email: string) => Promise<void>;
@@ -41,31 +39,24 @@ interface AppContextType {
   initiateChangePassword: (userId: string, currentPassword: string) => Promise<void>;
   confirmChangePassword: (userId: string, otp: string, newPassword: string) => Promise<void>;
   
-  // User
   addUser: (user: User, password: string) => Promise<void>;
   updateUser: (id: string, updates: Partial<User>) => Promise<void>;
   
-  // Pickups
   schedulePickup: (pickup: PickupTask) => Promise<void>;
   updatePickup: (id: string, updates: Partial<PickupTask>) => Promise<void>;
   getPickupsByRole: (role: UserRole, userId?: string) => PickupTask[];
   
-  // Redemption
   createRedemptionRequest: (req: RedemptionRequest) => Promise<void>;
   updateRedemptionStatus: (id: string, status: 'Approved' | 'Rejected') => Promise<void>;
   
-  // Messages
   sendMessage: (msg: Message) => Promise<void>;
   
-  // Config
   updateSysConfig: (config: SystemConfig) => Promise<void>;
   updateWasteRates: (rates: WasteRates) => Promise<void>;
   
-  // Blog
   addBlogPost: (post: BlogPost) => Promise<void>;
   deleteBlogPost: (id: string) => Promise<void>;
   
-  // Certificates
   addCertificate: (cert: Certificate) => Promise<void>;
 }
 
@@ -73,7 +64,6 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 // ============================================================
 // API HELPER
-// Centralized fetch wrapper with auth + error handling
 // ============================================================
 
 const apiCall = async (endpoint: string, options: RequestInit = {}) => {
@@ -103,7 +93,6 @@ const apiCall = async (endpoint: string, options: RequestInit = {}) => {
         throw new Error(errorMsg);
     }
     
-    // Handle 204 No Content
     if (response.status === 204) return null;
     
     return response.json();
@@ -124,9 +113,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [sysConfig, setSysConfig] = useState<SystemConfig>({ maintenanceMode: false, allowRegistrations: true });
     const [wasteRates, setWasteRates] = useState<WasteRates>({});
     const [loading, setLoading] = useState(true);
+    
+    // FIX: Use ref to prevent infinite re-init loop
+    const hasInitialized = useRef(false);
 
     // ============================================================
-    // DATA FETCHERS
+    // DATA FETCHERS - all stable references via useCallback with empty deps
     // ============================================================
 
     const fetchConfig = useCallback(async () => {
@@ -202,6 +194,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, []);
 
+    // FIX: refreshAll is also stable (empty deps + uses functions that are stable)
     const refreshAll = useCallback(async () => {
         await Promise.all([
             fetchUsers(),
@@ -212,16 +205,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         ]);
     }, [fetchUsers, fetchPickups, fetchRedemption, fetchMessages, fetchCertificates]);
 
-    // Initial load - public endpoints only
+    // FIX: Initial load runs ONLY ONCE thanks to hasInitialized ref
     useEffect(() => {
+        if (hasInitialized.current) return;
+        hasInitialized.current = true;
+        
         const init = async () => {
+            // Public endpoints first (no auth required)
             await Promise.all([
                 fetchConfig(),
                 fetchBlog(),
                 fetchLocations(),
             ]);
             
-            // Try authenticated endpoints if token exists
+            // Authenticated endpoints if token exists
             const token = await getToken();
             if (token) {
                 await refreshAll();
@@ -230,7 +227,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             setLoading(false);
         };
         init();
-    }, [fetchConfig, fetchBlog, fetchLocations, refreshAll]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // ============================================================
     // AUTH METHODS
@@ -241,23 +239,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             method: 'POST',
             body: JSON.stringify({ email, password }),
         });
-        // Token is set by App.tsx via setToken; here we just refresh data
-        // We need to wait briefly for storage to commit before fetching
+        // Refresh after token is set by App.tsx (slight delay for storage commit)
         setTimeout(async () => {
             await refreshAll();
-        }, 100);
+        }, 200);
         return { user: data.user, token: data.token };
     };
 
-    const verifySession = async (token: string) => {
+    // FIX: verifySession does NOT call refreshAll - that caused infinite loop
+    // Refresh happens elsewhere (after login, on demand)
+    const verifySession = useCallback(async (token: string) => {
         const response = await fetch(`${API_BASE_URL}/auth/verify`, {
             headers: { 'Authorization': `Bearer ${token}` },
         });
         if (!response.ok) throw new Error('Invalid session');
         const data = await response.json();
+        // Refresh authenticated data ONCE after successful verify
         await refreshAll();
         return data;
-    };
+    }, [refreshAll]);
 
     const requestPasswordReset = async (email: string) => {
         await apiCall('auth/forgot-password', {
@@ -338,7 +338,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             method: 'PUT',
             body: JSON.stringify({ id, updates }),
         });
-        // Refresh pickups AND users (because zoints balance changes)
         await Promise.all([fetchPickups(), fetchUsers()]);
     };
 

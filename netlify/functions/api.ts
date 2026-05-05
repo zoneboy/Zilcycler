@@ -30,20 +30,20 @@ import {
 } from './validators';
 
 // ============================================================
-// CORS CONFIGURATION (Stage 1B - tightened)
+// CORS CONFIGURATION
 // ============================================================
 const ALLOWED_ORIGINS = [
   'https://zilcycler.netlify.app',
-  'http://localhost:5173',  // Vite dev
-  'http://localhost:8888',  // Netlify dev
-  'capacitor://localhost',  // Capacitor Android
-  'https://localhost',       // Capacitor Android (alt scheme)
+  'http://localhost:5173',
+  'http://localhost:8888',
+  'capacitor://localhost',
+  'https://localhost',
 ];
 
 const getCorsHeaders = (origin: string | undefined) => {
   const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) 
     ? origin 
-    : ALLOWED_ORIGINS[0]; // Default to production domain
+    : ALLOWED_ORIGINS[0];
   
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
@@ -53,7 +53,6 @@ const getCorsHeaders = (origin: string | undefined) => {
   };
 };
 
-// Helper for standard response
 const response = (statusCode: number, body: any, origin?: string) => ({
   statusCode,
   headers: { 
@@ -63,7 +62,6 @@ const response = (statusCode: number, body: any, origin?: string) => ({
   body: JSON.stringify(body)
 });
 
-// Production-safe error response
 const errorResponse = (statusCode: number, publicMessage: string, internalError?: any, origin?: string) => {
   if (internalError) {
     console.error(`[API ERROR ${statusCode}]`, internalError);
@@ -72,25 +70,23 @@ const errorResponse = (statusCode: number, publicMessage: string, internalError?
 };
 
 // ============================================================
-// SECRET STRENGTH VALIDATION (Stage 1B)
+// SECRET STRENGTH VALIDATION
 // ============================================================
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error('CRITICAL: JWT_SECRET must be set in environment variables');
 }
 if (JWT_SECRET.length < 32) {
-  throw new Error('CRITICAL: JWT_SECRET must be at least 32 characters. Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  throw new Error('CRITICAL: JWT_SECRET must be at least 32 characters.');
 }
 
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
-// --- ENCRYPTION UTILS ---
 const ENCRYPTION_SECRET = process.env.ENCRYPTION_KEY || JWT_SECRET;
 const ENCRYPTION_SALT = process.env.ENCRYPTION_SALT;
 
-// SECURITY: Warn loudly if ENCRYPTION_KEY falls back to JWT_SECRET
 if (!process.env.ENCRYPTION_KEY) {
-  console.warn('SECURITY WARNING: ENCRYPTION_KEY not set, falling back to JWT_SECRET. Set a separate ENCRYPTION_KEY in production.');
+  console.warn('SECURITY WARNING: ENCRYPTION_KEY not set, falling back to JWT_SECRET.');
 }
 
 if (!ENCRYPTION_SALT && IS_PRODUCTION) {
@@ -105,7 +101,6 @@ const ENCRYPTION_KEY = scryptSync(ENCRYPTION_SECRET, SALT_BUFFER, 32);
 
 const encrypt = (text: string): string => {
     if (!text) return text;
-    // SECURITY: No silent fallback. If encryption fails, throw - never store plaintext.
     const iv = randomBytes(16);
     const cipher = createCipheriv('aes-256-gcm', ENCRYPTION_KEY, iv);
     let encrypted = cipher.update(text, 'utf8', 'hex');
@@ -120,17 +115,12 @@ const encrypt = (text: string): string => {
 
 const decrypt = (text: string): string => {
     if (!text) return text;
-    
-    if (!text.startsWith('{')) {
-        return text; // Legacy plaintext
-    }
+    if (!text.startsWith('{')) return text;
     
     try {
         const parsed = JSON.parse(text);
         const { iv, content, tag } = parsed;
-        if (!iv || !content || !tag) {
-            return text;
-        }
+        if (!iv || !content || !tag) return text;
 
         const decipher = createDecipheriv('aes-256-gcm', ENCRYPTION_KEY, Buffer.from(iv, 'hex'));
         decipher.setAuthTag(Buffer.from(tag, 'hex'));
@@ -138,12 +128,11 @@ const decrypt = (text: string): string => {
         decrypted += decipher.final('utf8');
         return decrypted;
     } catch (e) {
-        console.error("Decryption error - data may be corrupted or key changed", e);
+        console.error("Decryption error", e);
         return '';
     }
 };
 
-// --- TIMING-SAFE STRING COMPARISON ---
 const safeCompare = (a: string, b: string): boolean => {
     if (typeof a !== 'string' || typeof b !== 'string') return false;
     const bufA = Buffer.from(a);
@@ -153,7 +142,7 @@ const safeCompare = (a: string, b: string): boolean => {
 };
 
 // ============================================================
-// AUDIT LOG HELPER (Stage 1B)
+// AUDIT LOG HELPER
 // ============================================================
 const auditLog = async (params: {
     actorId: string | null;
@@ -179,7 +168,6 @@ const auditLog = async (params: {
             ]
         );
     } catch (e) {
-        // Audit failures should never break the main flow, but should be logged
         console.error('AUDIT LOG FAILURE:', e);
     }
 };
@@ -190,7 +178,7 @@ interface AuthUser {
     role: string;
     email: string;
     iat: number;
-    tv?: number; // token version
+    tv?: number;
 }
 
 const getAuth = async (headers: any): Promise<AuthUser | null> => {
@@ -202,7 +190,6 @@ const getAuth = async (headers: any): Promise<AuthUser | null> => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
         
-        // SECURITY: Check password_changed_at and token_version
         const userCheck = await query(
             'SELECT password_changed_at, token_version, is_active FROM users WHERE id = $1',
             [decoded.userId]
@@ -214,7 +201,6 @@ const getAuth = async (headers: any): Promise<AuthUser | null> => {
         
         const userRow = userCheck.rows[0];
         
-        // User suspended -> token invalid
         if (userRow.is_active === false) {
             return null;
         }
@@ -227,7 +213,6 @@ const getAuth = async (headers: any): Promise<AuthUser | null> => {
             }
         }
         
-        // Token version mismatch -> token invalid (for forced logout)
         if (decoded.tv !== undefined && userRow.token_version !== decoded.tv) {
             return null;
         }
@@ -238,7 +223,6 @@ const getAuth = async (headers: any): Promise<AuthUser | null> => {
     }
 };
 
-// Configure Nodemailer Transporter
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: parseInt(process.env.SMTP_PORT || '587'),
@@ -250,11 +234,13 @@ const transporter = nodemailer.createTransport({
 });
 
 // ============================================================
-// RATE LIMITERS (Stage 1B - multiple tiers)
+// RATE LIMITERS
+// FIX: Increased verify limit (was 30/min causing lockout on app reload)
 // ============================================================
-let strictRatelimit: Ratelimit | null = null;       // 5/min - login, password reset
-let standardRatelimit: Ratelimit | null = null;     // 30/min - API calls
-let messagesRatelimit: Ratelimit | null = null;     // 20/min - messaging
+let strictRatelimit: Ratelimit | null = null;
+let standardRatelimit: Ratelimit | null = null;
+let messagesRatelimit: Ratelimit | null = null;
+let verifyRatelimit: Ratelimit | null = null;
 
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
     const redis = Redis.fromEnv();
@@ -276,16 +262,22 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
         analytics: true,
         prefix: 'rl:msg',
     });
+    // FIX: Verify endpoint gets more headroom since it's called on every navigation
+    verifyRatelimit = new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(120, '1 m'),
+        analytics: true,
+        prefix: 'rl:verify',
+    });
 } else {
     console.warn("WARNING: Upstash Redis credentials not found. Rate limiting is disabled.");
 }
 
-// Password Utils
 const SALT_ROUNDS = 12;
 const MAX_OTP_ATTEMPTS = 5;
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 15;
-const TOKEN_EXPIRY = '12h'; // Reduced from 24h
+const TOKEN_EXPIRY = '12h';
 
 const hashPassword = async (password: string) => {
   return await bcrypt.hash(password, SALT_ROUNDS);
@@ -296,7 +288,6 @@ const verifyPassword = async (password: string, storedHash: string) => {
     return await bcrypt.compare(password, storedHash);
 };
 
-// --- OTP VALIDATION HELPER ---
 const validateOtp = async (email: string, providedOtp: string): Promise<{ valid: boolean; error?: string }> => {
     const result = await query('SELECT * FROM password_resets WHERE email = $1', [email]);
     
@@ -328,10 +319,8 @@ const validateOtp = async (email: string, providedOtp: string): Promise<{ valid:
 };
 
 export const handler = async (event: any) => {
-  // Get origin for CORS
   const origin = event.headers?.origin || event.headers?.Origin;
   
-  // Handle Preflight
   if (event.httpMethod === 'OPTIONS') {
     return {
         statusCode: 204,
@@ -365,7 +354,6 @@ export const handler = async (event: any) => {
 
   console.log(`[API] ${method} /${cleanPath} [User: ${user ? user.role : 'Guest'}] [IP: ${clientIp}]`);
 
-  // Rate limit helpers
   const checkStrictLimit = async (id: string) => {
       if (!strictRatelimit) return true;
       const { success } = await strictRatelimit.limit(id);
@@ -381,10 +369,63 @@ export const handler = async (event: any) => {
       const { success } = await messagesRatelimit.limit(id);
       return success;
   };
+  const checkVerifyLimit = async (id: string) => {
+      if (!verifyRatelimit) return true;
+      const { success } = await verifyRatelimit.limit(id);
+      return success;
+  };
 
   try {
     if (cleanPath === '' || cleanPath === 'health') {
         return response(200, { status: 'ok', message: 'Zilcycler API is running' }, origin);
+    }
+
+    // ============================================================
+    // PUBLIC ROUTES (no auth required)
+    // FIX: config, blog GET, locations GET moved here from protected section
+    // ============================================================
+    
+    // CONFIG (public read - needed for landing page)
+    if (cleanPath === 'config' && method === 'GET') {
+        const configRes = await query('SELECT * FROM system_config WHERE id = 1');
+        const ratesRes = await query('SELECT * FROM waste_rates');
+        
+        const ratesObj: any = {};
+        ratesRes.rows.forEach((r: any) => {
+            ratesObj[r.category] = {
+                rate: parseFloat(r.rate),
+                co2: parseFloat(r.co2_saved_per_kg || 0)
+            };
+        });
+
+        return response(200, {
+            sysConfig: {
+                maintenanceMode: configRes.rows[0]?.maintenance_mode || false,
+                allowRegistrations: configRes.rows[0]?.allow_registrations || true
+            },
+            wasteRates: ratesObj
+        }, origin);
+    }
+
+    // BLOG (public read)
+    if (cleanPath === 'blog' && method === 'GET') {
+        const { rows } = await query('SELECT * FROM blog_posts ORDER BY created_at DESC');
+        return response(200, rows, origin);
+    }
+
+    // LOCATIONS (public read)
+    if (cleanPath === 'locations' && method === 'GET') {
+        const { rows } = await query('SELECT * FROM drop_off_locations');
+        const locations = rows.map((l: any) => ({
+            id: l.id,
+            name: l.name,
+            address: l.address,
+            open: l.open_hours,
+            url: l.map_url,
+            lat: parseFloat(l.lat),
+            lng: parseFloat(l.lng)
+        }));
+        return response(200, locations, origin);
     }
 
     // ============================================================
@@ -407,13 +448,11 @@ export const handler = async (event: any) => {
         if (!dbUser) return errorResponse(401, 'Invalid email or password', null, origin);
         if (!dbUser.password_hash) return errorResponse(401, 'Account security update required. Please reset password.', null, origin);
 
-        // SECURITY: Check account lockout
         if (dbUser.locked_until && new Date(dbUser.locked_until) > new Date()) {
             const minutesLeft = Math.ceil((new Date(dbUser.locked_until).getTime() - Date.now()) / 60000);
             return errorResponse(429, `Account temporarily locked. Try again in ${minutesLeft} minute(s).`, null, origin);
         }
 
-        // Maintenance Mode (ADMIN only bypasses)
         const configCheck = await query('SELECT maintenance_mode FROM system_config WHERE id = 1');
         if (configCheck.rows[0]?.maintenance_mode && dbUser.role !== 'ADMIN') {
              return errorResponse(503, 'System is in maintenance mode. Please try again later.', null, origin);
@@ -422,7 +461,6 @@ export const handler = async (event: any) => {
         const isValid = await verifyPassword(password, dbUser.password_hash);
         
         if (!isValid) {
-            // SECURITY: Increment failed login attempts and lock if threshold reached
             const newFailedCount = (dbUser.failed_login_attempts || 0) + 1;
             
             if (newFailedCount >= MAX_LOGIN_ATTEMPTS) {
@@ -457,7 +495,6 @@ export const handler = async (event: any) => {
             return errorResponse(403, 'Account is suspended. Please contact support.', null, origin);
         }
 
-        // SECURITY: Reset failed attempts and update last login on success
         await query(
             'UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = CURRENT_TIMESTAMP WHERE id = $1',
             [dbUser.id]
@@ -504,8 +541,8 @@ export const handler = async (event: any) => {
     }
 
     if (cleanPath === 'auth/verify' && method === 'GET') {
-        // Stage 1B: Add rate limit to prevent token enumeration
-        if (!(await checkStandardLimit(`verify:${clientIp}`))) {
+        // FIX: Use higher limit (120/min) since this is called on every navigation
+        if (!(await checkVerifyLimit(`verify:${clientIp}`))) {
             return errorResponse(429, 'Too many requests', null, origin);
         }
         if (!user) return errorResponse(401, 'Invalid or expired token', null, origin);
@@ -665,7 +702,6 @@ export const handler = async (event: any) => {
         if (!otpCheck.valid) return errorResponse(400, otpCheck.error || 'Invalid code', null, origin);
         
         const passwordHash = await hashPassword(newPassword);
-        // Stage 1B: Bump token_version on password reset to invalidate ALL sessions
         const userRes = await query(
             'UPDATE users SET password_hash = $1, password_changed_at = CURRENT_TIMESTAMP, token_version = COALESCE(token_version, 1) + 1, failed_login_attempts = 0, locked_until = NULL WHERE email = $2 RETURNING id, role',
             [passwordHash, email]
@@ -803,29 +839,8 @@ export const handler = async (event: any) => {
         
         return response(200, { success: true }, origin);
     }
-
-    // --- CONFIG & RATES ---
-    if (cleanPath === 'config') {
-        const configRes = await query('SELECT * FROM system_config WHERE id = 1');
-        const ratesRes = await query('SELECT * FROM waste_rates');
-        
-        const ratesObj: any = {};
-        ratesRes.rows.forEach((r: any) => {
-            ratesObj[r.category] = {
-                rate: parseFloat(r.rate),
-                co2: parseFloat(r.co2_saved_per_kg || 0)
-            };
-        });
-
-        return response(200, {
-            sysConfig: {
-                maintenanceMode: configRes.rows[0]?.maintenance_mode || false,
-                allowRegistrations: configRes.rows[0]?.allow_registrations || true
-            },
-            wasteRates: ratesObj
-        }, origin);
-    }
     
+    // --- CONFIG WRITE (admin only) ---
     if (cleanPath === 'config/update' && method === 'POST') {
         if (!isAdmin) return errorResponse(403, 'Admin only', null, origin);
         
@@ -871,73 +886,51 @@ export const handler = async (event: any) => {
         return response(200, { success: true }, origin);
     }
 
-    // --- BLOG ---
-    if (cleanPath === 'blog') {
-        if (method === 'GET') {
-            const { rows } = await query('SELECT * FROM blog_posts ORDER BY created_at DESC');
-            return response(200, rows, origin);
-        }
-        if (method === 'POST') {
-            if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
-            
-            const validation = validate(CreateBlogPostSchema, body);
-            if (!validation.success) return errorResponse(400, validation.error, null, origin);
-            
-            const p = validation.data;
-            const postId = `blog_${randomUUID()}`;
-            await query(
-                'INSERT INTO blog_posts (id, title, category, excerpt, image) VALUES ($1, $2, $3, $4, $5)',
-                [postId, p.title, p.category, p.excerpt, p.image]
-            );
-            
-            await auditLog({
-                actorId: user.userId,
-                actorRole: user.role,
-                action: 'BLOG_POST_CREATED',
-                targetType: 'blog_post',
-                targetId: postId,
-                metadata: { title: p.title },
-                ipAddress: clientIp,
-            });
-            
-            return response(201, { success: true, id: postId }, origin);
-        }
-        if (method === 'DELETE') {
-            if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
-            
-            const validation = validate(DeleteBlogPostSchema, body);
-            if (!validation.success) return errorResponse(400, validation.error, null, origin);
-            
-            await query('DELETE FROM blog_posts WHERE id = $1', [validation.data.id]);
-            
-            await auditLog({
-                actorId: user.userId,
-                actorRole: user.role,
-                action: 'BLOG_POST_DELETED',
-                targetType: 'blog_post',
-                targetId: validation.data.id,
-                ipAddress: clientIp,
-            });
-            
-            return response(200, { success: true }, origin);
-        }
+    // --- BLOG WRITE (admin/staff) ---
+    if (cleanPath === 'blog' && method === 'POST') {
+        if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
+        
+        const validation = validate(CreateBlogPostSchema, body);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
+        
+        const p = validation.data;
+        const postId = `blog_${randomUUID()}`;
+        await query(
+            'INSERT INTO blog_posts (id, title, category, excerpt, image) VALUES ($1, $2, $3, $4, $5)',
+            [postId, p.title, p.category, p.excerpt, p.image]
+        );
+        
+        await auditLog({
+            actorId: user.userId,
+            actorRole: user.role,
+            action: 'BLOG_POST_CREATED',
+            targetType: 'blog_post',
+            targetId: postId,
+            metadata: { title: p.title },
+            ipAddress: clientIp,
+        });
+        
+        return response(201, { success: true, id: postId }, origin);
     }
-
-    // --- LOCATIONS ---
-    if (cleanPath === 'locations') {
-        if (method === 'GET') {
-            const { rows } = await query('SELECT * FROM drop_off_locations');
-            const locations = rows.map((l: any) => ({
-                id: l.id,
-                name: l.name,
-                address: l.address,
-                open: l.open_hours,
-                url: l.map_url,
-                lat: parseFloat(l.lat),
-                lng: parseFloat(l.lng)
-            }));
-            return response(200, locations, origin);
-        }
+    
+    if (cleanPath === 'blog' && method === 'DELETE') {
+        if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
+        
+        const validation = validate(DeleteBlogPostSchema, body);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
+        
+        await query('DELETE FROM blog_posts WHERE id = $1', [validation.data.id]);
+        
+        await auditLog({
+            actorId: user.userId,
+            actorRole: user.role,
+            action: 'BLOG_POST_DELETED',
+            targetType: 'blog_post',
+            targetId: validation.data.id,
+            ipAddress: clientIp,
+        });
+        
+        return response(200, { success: true }, origin);
     }
 
     // --- CERTIFICATES ---
@@ -1089,7 +1082,6 @@ export const handler = async (event: any) => {
               delete safeUpdates.role;
           }
 
-          // Track sensitive admin actions for audit
           const sensitiveChanges: any = {};
           if (safeUpdates.isActive !== undefined) sensitiveChanges.isActive = safeUpdates.isActive;
           if (safeUpdates.zointsBalance !== undefined) sensitiveChanges.zointsBalance = safeUpdates.zointsBalance;
@@ -1114,7 +1106,6 @@ export const handler = async (event: any) => {
               );
           }
           
-          // Audit if sensitive fields changed
           if (Object.keys(sensitiveChanges).length > 0) {
               await auditLog({
                   actorId: user.userId,
@@ -1409,7 +1400,6 @@ export const handler = async (event: any) => {
             return response(200, messages, origin);
         }
         if (method === 'POST') {
-            // Stage 1B: Per-user rate limit on messages
             if (!(await checkMessagesLimit(`msg:${user.userId}`))) {
                 return errorResponse(429, 'You are sending messages too quickly. Please slow down.', null, origin);
             }

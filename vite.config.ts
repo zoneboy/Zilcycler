@@ -33,21 +33,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Skip Google Fonts caching - browser handles font caching natively
+        // Cloudinary images are cached on-demand only
         runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365,
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
           {
             urlPattern: /^https:\/\/res\.cloudinary\.com\/.*/i,
             handler: 'CacheFirst',
@@ -57,9 +45,14 @@ export default defineConfig({
                 maxEntries: 100,
                 maxAgeSeconds: 60 * 60 * 24 * 30,
               },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
             },
           },
         ],
+        // Don't fall back to index.html for API or external requests
+        navigateFallbackDenylist: [/^\/api/, /^\/\.netlify/],
       },
     })
   ],
