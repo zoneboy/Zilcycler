@@ -24,7 +24,6 @@ const PasswordSchema = z.string().min(8, 'Password must be at least 8 characters
 const PhoneSchema = z.string().trim().regex(/^[0-9+\-\s()]{10,20}$/, 'Invalid phone number');
 const OtpSchema = z.string().regex(/^\d{6}$/, 'OTP must be 6 digits');
 const NameSchema = z.string().trim().min(1, 'Name is required').max(255);
-const UrlSchema = z.string().url('Invalid URL').max(2000).optional();
 const SafeStringSchema = z.string().trim().max(500);
 const LongTextSchema = z.string().trim().max(5000);
 
@@ -215,7 +214,12 @@ export const CreateCertificateSchema = z.object({
 });
 
 // --- Helper: safe parse with formatted error ---
-export const validate = <T>(schema: z.ZodSchema<T>, data: unknown): { success: true; data: T } | { success: false; error: string } => {
+// Type definition with explicit discriminated union for TypeScript narrowing
+export type ValidationResult<T> = 
+  | { success: true; data: T; error?: undefined }
+  | { success: false; error: string; data?: undefined };
+
+export const validate = <T>(schema: z.ZodSchema<T>, data: unknown): ValidationResult<T> => {
   const result = schema.safeParse(data);
   if (result.success) {
     return { success: true, data: result.data };
