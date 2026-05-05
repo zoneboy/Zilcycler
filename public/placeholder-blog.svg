@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#15803d"/>
+      <stop offset="100%" stop-color="#166534"/>
+    </linearGradient>
+    <pattern id="leaves" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
+      <path d="M30 15 Q40 25 30 45 Q20 25 30 15 Z" fill="rgba(255,255,255,0.06)"/>
+    </pattern>
+  </defs>
+  <rect width="400" height="200" fill="url(#bg)"/>
+  <rect width="400" height="200" fill="url(#leaves)"/>
+  <g transform="translate(200, 100)">
+    <circle cx="0" cy="0" r="42" fill="rgba(255,255,255,0.12)"/>
+    <path d="M-22 -8 L-12 8 L0 -4 L12 8 L22 -8 M-22 12 L22 12" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="-15" cy="-15" r="3" fill="white" opacity="0.6"/>
+    <circle cx="18" cy="-12" r="2.5" fill="white" opacity="0.5"/>
+    <circle cx="-8" cy="20" r="2" fill="white" opacity="0.4"/>
+  </g>
+  <text x="200" y="170" text-anchor="middle" fill="rgba(255,255,255,0.75)" font-family="-apple-system, sans-serif" font-size="14" font-weight="600" letter-spacing="2">ZILCYCLER</text>
+</svg>

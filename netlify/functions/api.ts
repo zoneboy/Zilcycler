@@ -14,6 +14,10 @@ import {
   ResetPasswordSchema,
   ChangePasswordInitiateSchema,
   ChangePasswordConfirmSchema,
+  DeleteAccountInitiateSchema,
+  DeleteAccountConfirmSchema,
+  LogErrorSchema,
+  VersionCheckSchema,
   SignUploadSchema,
   CreateUserSchema,
   UpdateUserSchema,
@@ -70,7 +74,7 @@ const errorResponse = (statusCode: number, publicMessage: string, internalError?
 };
 
 // ============================================================
-// SECRET STRENGTH VALIDATION
+// SECRETS
 // ============================================================
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -172,6 +176,19 @@ const auditLog = async (params: {
     }
 };
 
+// ============================================================
+// VERSION COMPARISON HELPER
+// ============================================================
+const compareVersions = (a: string, b: string): number => {
+    const partsA = a.split('.').map(n => parseInt(n) || 0);
+    const partsB = b.split('.').map(n => parseInt(n) || 0);
+    for (let i = 0; i < 3; i++) {
+        if (partsA[i] > partsB[i]) return 1;
+        if (partsA[i] < partsB[i]) return -1;
+    }
+    return 0;
+};
+
 // --- AUTH MIDDLEWARE ---
 interface AuthUser {
     userId: string;
@@ -190,8 +207,9 @@ const getAuth = async (headers: any): Promise<AuthUser | null> => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
         
+        // STAGE 2C: Also exclude soft-deleted users
         const userCheck = await query(
-            'SELECT password_changed_at, token_version, is_active FROM users WHERE id = $1',
+            'SELECT password_changed_at, token_version, is_active, deleted_at FROM users WHERE id = $1',
             [decoded.userId]
         );
         
@@ -200,6 +218,11 @@ const getAuth = async (headers: any): Promise<AuthUser | null> => {
         }
         
         const userRow = userCheck.rows[0];
+        
+        // Soft-deleted account
+        if (userRow.deleted_at !== null) {
+            return null;
+        }
         
         if (userRow.is_active === false) {
             return null;
@@ -235,12 +258,12 @@ const transporter = nodemailer.createTransport({
 
 // ============================================================
 // RATE LIMITERS
-// FIX: Increased verify limit (was 30/min causing lockout on app reload)
 // ============================================================
 let strictRatelimit: Ratelimit | null = null;
 let standardRatelimit: Ratelimit | null = null;
 let messagesRatelimit: Ratelimit | null = null;
 let verifyRatelimit: Ratelimit | null = null;
+let errorLogRatelimit: Ratelimit | null = null;
 
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
     const redis = Redis.fromEnv();
@@ -262,12 +285,18 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
         analytics: true,
         prefix: 'rl:msg',
     });
-    // FIX: Verify endpoint gets more headroom since it's called on every navigation
     verifyRatelimit = new Ratelimit({
         redis,
         limiter: Ratelimit.slidingWindow(120, '1 m'),
         analytics: true,
         prefix: 'rl:verify',
+    });
+    // STAGE 2C: Cap error logging to prevent log spam
+    errorLogRatelimit = new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(20, '1 m'),
+        analytics: true,
+        prefix: 'rl:err',
     });
 } else {
     console.warn("WARNING: Upstash Redis credentials not found. Rate limiting is disabled.");
@@ -374,6 +403,11 @@ export const handler = async (event: any) => {
       const { success } = await verifyRatelimit.limit(id);
       return success;
   };
+  const checkErrorLogLimit = async (id: string) => {
+      if (!errorLogRatelimit) return true;
+      const { success } = await errorLogRatelimit.limit(id);
+      return success;
+  };
 
   try {
     if (cleanPath === '' || cleanPath === 'health') {
@@ -382,10 +416,83 @@ export const handler = async (event: any) => {
 
     // ============================================================
     // PUBLIC ROUTES (no auth required)
-    // FIX: config, blog GET, locations GET moved here from protected section
     // ============================================================
     
-    // CONFIG (public read - needed for landing page)
+    // STAGE 2C: Version check (public, called on app launch)
+    if (cleanPath === 'health/version' && method === 'POST') {
+        const validation = validate(VersionCheckSchema, body);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
+        
+        const { platform, currentVersion } = validation.data;
+        
+        const versionRes = await query(
+            'SELECT current_version, minimum_version, update_message, update_url FROM app_versions WHERE platform = $1',
+            [platform]
+        );
+        
+        if (versionRes.rows.length === 0) {
+            // Platform not configured - assume OK
+            return response(200, { 
+                upToDate: true, 
+                forceUpdate: false 
+            }, origin);
+        }
+        
+        const versionInfo = versionRes.rows[0];
+        const isAtMinimum = compareVersions(currentVersion, versionInfo.minimum_version) >= 0;
+        const isLatest = compareVersions(currentVersion, versionInfo.current_version) >= 0;
+        
+        return response(200, {
+            upToDate: isLatest,
+            forceUpdate: !isAtMinimum,
+            currentVersion: versionInfo.current_version,
+            minimumVersion: versionInfo.minimum_version,
+            updateMessage: versionInfo.update_message,
+            updateUrl: versionInfo.update_url,
+        }, origin);
+    }
+    
+    // STAGE 2C: Error logging (public but rate-limited; auth optional for user_id tracking)
+    if (cleanPath === 'log/error' && method === 'POST') {
+        // Rate limit by IP to prevent log spam
+        if (!(await checkErrorLogLimit(`err:${clientIp}`))) {
+            // Silently drop - don't tell client they're rate limited
+            return response(200, { logged: false }, origin);
+        }
+        
+        const validation = validate(LogErrorSchema, body);
+        if (!validation.success) {
+            // Don't fail loudly - just drop malformed errors
+            return response(200, { logged: false }, origin);
+        }
+        
+        const e = validation.data;
+        
+        try {
+            await query(
+                `INSERT INTO error_log (user_id, error_type, error_message, error_stack, user_agent, app_version, platform, url, metadata, ip_address)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                [
+                    user?.userId || null,
+                    e.errorType,
+                    e.errorMessage,
+                    e.errorStack || null,
+                    e.userAgent || null,
+                    e.appVersion || null,
+                    e.platform,
+                    e.url || null,
+                    e.metadata ? JSON.stringify(e.metadata) : null,
+                    clientIp,
+                ]
+            );
+            return response(200, { logged: true }, origin);
+        } catch (err) {
+            console.error('Failed to write error log:', err);
+            return response(200, { logged: false }, origin);
+        }
+    }
+    
+    // CONFIG (public read)
     if (cleanPath === 'config' && method === 'GET') {
         const configRes = await query('SELECT * FROM system_config WHERE id = 1');
         const ratesRes = await query('SELECT * FROM waste_rates');
@@ -442,7 +549,8 @@ export const handler = async (event: any) => {
         
         const { email, password } = validation.data;
         
-        const { rows } = await query('SELECT * FROM users WHERE email = $1', [email]);
+        // STAGE 2C: Exclude soft-deleted users
+        const { rows } = await query('SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL', [email]);
         const dbUser = rows[0];
 
         if (!dbUser) return errorResponse(401, 'Invalid email or password', null, origin);
@@ -541,7 +649,6 @@ export const handler = async (event: any) => {
     }
 
     if (cleanPath === 'auth/verify' && method === 'GET') {
-        // FIX: Use higher limit (120/min) since this is called on every navigation
         if (!(await checkVerifyLimit(`verify:${clientIp}`))) {
             return errorResponse(429, 'Too many requests', null, origin);
         }
@@ -563,7 +670,8 @@ export const handler = async (event: any) => {
         }
 
         const { email } = validation.data;
-        const userCheck = await query('SELECT id FROM users WHERE email = $1', [email]);
+        // STAGE 2C: Allow re-registration with previously deleted account email
+        const userCheck = await query('SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL', [email]);
         if (userCheck.rows.length > 0) return errorResponse(409, 'Email already registered. Please login.', null, origin);
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -609,7 +717,8 @@ export const handler = async (event: any) => {
         const otpCheck = await validateOtp(regUser.email, otp);
         if (!otpCheck.valid) return errorResponse(400, otpCheck.error || 'Invalid code', null, origin);
 
-        const emailCheck = await query('SELECT id FROM users WHERE email = $1', [regUser.email]);
+        // STAGE 2C: Check active accounts only
+        const emailCheck = await query('SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL', [regUser.email]);
         if (emailCheck.rows.length > 0) {
             return errorResponse(409, 'Email already registered.', null, origin);
         }
@@ -629,7 +738,7 @@ export const handler = async (event: any) => {
             action: 'USER_REGISTERED',
             targetType: 'user',
             targetId: userId,
-            metadata: { email: regUser.email, role: regUser.role },
+            metadata: { email: regUser.email, role: regUser.role, acceptedTerms: true },
             ipAddress: clientIp,
         });
 
@@ -658,7 +767,7 @@ export const handler = async (event: any) => {
         if (!validation.success) return errorResponse(400, validation.error, null, origin);
 
         const { email } = validation.data;
-        const { rows } = await query('SELECT id FROM users WHERE email = $1', [email]);
+        const { rows } = await query('SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL', [email]);
         
         if (rows.length > 0) {
             const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -703,7 +812,7 @@ export const handler = async (event: any) => {
         
         const passwordHash = await hashPassword(newPassword);
         const userRes = await query(
-            'UPDATE users SET password_hash = $1, password_changed_at = CURRENT_TIMESTAMP, token_version = COALESCE(token_version, 1) + 1, failed_login_attempts = 0, locked_until = NULL WHERE email = $2 RETURNING id, role',
+            'UPDATE users SET password_hash = $1, password_changed_at = CURRENT_TIMESTAMP, token_version = COALESCE(token_version, 1) + 1, failed_login_attempts = 0, locked_until = NULL WHERE email = $2 AND deleted_at IS NULL RETURNING id, role',
             [passwordHash, email]
         );
         await query('DELETE FROM password_resets WHERE email = $1', [email]);
@@ -728,6 +837,149 @@ export const handler = async (event: any) => {
     
     if (!user) {
         return errorResponse(401, 'Unauthorized access', null, origin);
+    }
+
+    // STAGE 2C: ACCOUNT DELETION - INITIATE
+    if (cleanPath === 'auth/delete-account/initiate' && method === 'POST') {
+        if (!(await checkStrictLimit(`del_init:${user.userId}`))) {
+            return errorResponse(429, 'Too many requests.', null, origin);
+        }
+
+        const validation = validate(DeleteAccountInitiateSchema, body);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
+
+        const { userId, password } = validation.data;
+        if (user.userId !== userId) return errorResponse(403, 'Forbidden', null, origin);
+
+        // Admin cannot self-delete (must use a different admin)
+        if (user.role === 'ADMIN') {
+            return errorResponse(403, 'Admin accounts cannot be self-deleted. Contact another administrator.', null, origin);
+        }
+
+        const { rows } = await query('SELECT email, password_hash FROM users WHERE id = $1 AND deleted_at IS NULL', [userId]);
+        if (rows.length === 0) return errorResponse(404, 'User not found', null, origin);
+        if (!(await verifyPassword(password, rows[0].password_hash))) {
+            return errorResponse(401, 'Incorrect password', null, origin);
+        }
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        await query(
+            'INSERT INTO password_resets (email, otp, expires_at, attempts) VALUES ($1, $2, $3, 0) ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3, attempts = 0',
+            [rows[0].email, otp, expiresAt]
+        );
+
+        if (process.env.SMTP_HOST) {
+            try {
+                await transporter.sendMail({
+                    from: process.env.SMTP_FROM,
+                    to: rows[0].email,
+                    subject: 'Confirm Account Deletion - Zilcycler',
+                    text: `You requested to delete your Zilcycler account.\n\nVerification code: ${otp}\n\nThis code expires in 15 minutes.\n\nIf you did NOT request this, please change your password immediately and contact admin@zilcycler.com.\n\nWARNING: Deleting your account will:\n- Anonymize your personal information\n- Forfeit any unredeemed Zoints\n- Cannot be undone`
+                });
+            } catch (e) {
+                console.error("Email fail", e);
+            }
+        } else if (!IS_PRODUCTION) {
+            console.log(`[DEV] Delete Account OTP for ${rows[0].email}: ${otp}`);
+        }
+
+        return response(200, { message: "OTP sent. Check your email to confirm deletion." }, origin);
+    }
+
+    // STAGE 2C: ACCOUNT DELETION - CONFIRM
+    if (cleanPath === 'auth/delete-account/confirm' && method === 'POST') {
+        if (!(await checkStrictLimit(`del_conf:${user.userId}`))) {
+            return errorResponse(429, 'Too many attempts.', null, origin);
+        }
+
+        const validation = validate(DeleteAccountConfirmSchema, body);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
+
+        const { userId, otp, reason } = validation.data;
+        if (user.userId !== userId) return errorResponse(403, 'Forbidden', null, origin);
+
+        if (user.role === 'ADMIN') {
+            return errorResponse(403, 'Admin accounts cannot be self-deleted.', null, origin);
+        }
+
+        const userRes = await query('SELECT email, role FROM users WHERE id = $1 AND deleted_at IS NULL', [userId]);
+        if (userRes.rows.length === 0) return errorResponse(404, 'User not found', null, origin);
+        const email = userRes.rows[0].email;
+        const userRole = userRes.rows[0].role;
+
+        const otpCheck = await validateOtp(email, otp);
+        if (!otpCheck.valid) return errorResponse(400, otpCheck.error || 'Invalid code', null, origin);
+
+        // ============================================================
+        // SOFT DELETE WITH ANONYMIZATION
+        // ============================================================
+        const anonId = `deleted_${randomUUID().substring(0, 8)}`;
+        
+        await query('BEGIN');
+        try {
+            // Anonymize the user record but keep the row for FK integrity
+            await query(
+                `UPDATE users SET 
+                    name = $1,
+                    email = $2,
+                    phone = NULL,
+                    avatar = NULL,
+                    password_hash = NULL,
+                    bank_name = NULL,
+                    account_number = NULL,
+                    account_name = NULL,
+                    gender = NULL,
+                    address = NULL,
+                    is_active = FALSE,
+                    deleted_at = CURRENT_TIMESTAMP,
+                    deletion_reason = $3,
+                    token_version = COALESCE(token_version, 1) + 1,
+                    zoints_balance = 0
+                 WHERE id = $4`,
+                [`[Deleted User]`, `${anonId}@deleted.zilcycler`, reason || null, userId]
+            );
+
+            // Anonymize messages sent BY this user (keep messages received - other side may need context)
+            await query(
+                `UPDATE messages SET content = '[Message from deleted user]' WHERE sender_id = $1`,
+                [userId]
+            );
+
+            // Cancel any pending pickups
+            await query(
+                `UPDATE pickups SET status = 'Missed' WHERE user_id = $1 AND status IN ('Pending', 'Assigned')`,
+                [userId]
+            );
+
+            // Cancel any pending redemption requests (refunding doesn't matter since balance is zero now)
+            await query(
+                `UPDATE redemption_requests SET status = 'Rejected', refunded = TRUE WHERE user_id = $1 AND status = 'Pending'`,
+                [userId]
+            );
+
+            await query('COMMIT');
+
+            await auditLog({
+                actorId: userId,
+                actorRole: userRole,
+                action: 'ACCOUNT_DELETED',
+                targetType: 'user',
+                targetId: userId,
+                metadata: { reason: reason || 'no_reason_given' },
+                ipAddress: clientIp,
+            });
+
+            await query('DELETE FROM password_resets WHERE email = $1', [email]);
+
+            return response(200, { 
+                success: true, 
+                message: 'Your account has been deleted. Personal data has been anonymized.' 
+            }, origin);
+        } catch (e) {
+            await query('ROLLBACK');
+            throw e;
+        }
     }
 
     // --- CLOUDINARY SIGNING ---
@@ -760,671 +1012,4 @@ export const handler = async (event: any) => {
     }
     
     // --- CHANGE PASSWORD ---
-    if (cleanPath === 'auth/change-password/initiate' && method === 'POST') {
-        if (!(await checkStrictLimit(`chg_pw_init:${user.userId}`))) {
-            return errorResponse(429, 'Too many requests.', null, origin);
-        }
-
-        const validation = validate(ChangePasswordInitiateSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error, null, origin);
-
-        const { userId, currentPassword } = validation.data;
-        if (user.userId !== userId) return errorResponse(403, 'Forbidden', null, origin);
-
-        const { rows } = await query('SELECT email, password_hash FROM users WHERE id = $1', [userId]);
-        if (rows.length === 0) return errorResponse(404, 'User not found', null, origin);
-        if (!(await verifyPassword(currentPassword, rows[0].password_hash))) {
-            return errorResponse(401, 'Incorrect password', null, origin);
-        }
-
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-        await query(
-            'INSERT INTO password_resets (email, otp, expires_at, attempts) VALUES ($1, $2, $3, 0) ON CONFLICT (email) DO UPDATE SET otp = $2, expires_at = $3, attempts = 0',
-            [rows[0].email, otp, expiresAt]
-        );
-        
-        if (process.env.SMTP_HOST) {
-             try {
-                await transporter.sendMail({
-                    from: process.env.SMTP_FROM,
-                    to: rows[0].email,
-                    subject: 'Change Password Verification - Zilcycler',
-                    text: `Your verification code is: ${otp}\n\nThis code expires in 10 minutes.`
-                });
-             } catch (e) {
-                 console.error("Email fail", e);
-             }
-        } else if (!IS_PRODUCTION) {
-             console.log(`[DEV] Change Password OTP for ${rows[0].email}: ${otp}`);
-        }
-
-        return response(200, { message: "OTP sent" }, origin);
-    }
-
-    if (cleanPath === 'auth/change-password/confirm' && method === 'POST') {
-        if (!(await checkStrictLimit(`chg_pw_conf:${user.userId}`))) {
-            return errorResponse(429, 'Too many attempts.', null, origin);
-        }
-
-        const validation = validate(ChangePasswordConfirmSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error, null, origin);
-
-        const { userId, otp, newPassword } = validation.data;
-        if (user.userId !== userId) return errorResponse(403, 'Forbidden', null, origin);
-        
-        const userRes = await query('SELECT email, role FROM users WHERE id = $1', [userId]);
-        if (userRes.rows.length === 0) return errorResponse(404, 'User not found', null, origin);
-        const email = userRes.rows[0].email;
-        const userRole = userRes.rows[0].role;
-        
-        const otpCheck = await validateOtp(email, otp);
-        if (!otpCheck.valid) return errorResponse(400, otpCheck.error || 'Invalid code', null, origin);
-
-        const passwordHash = await hashPassword(newPassword);
-        await query(
-            'UPDATE users SET password_hash = $1, password_changed_at = CURRENT_TIMESTAMP, token_version = COALESCE(token_version, 1) + 1 WHERE id = $2',
-            [passwordHash, userId]
-        );
-        await query('DELETE FROM password_resets WHERE email = $1', [email]);
-        
-        await auditLog({
-            actorId: userId,
-            actorRole: userRole,
-            action: 'PASSWORD_CHANGED',
-            targetType: 'user',
-            targetId: userId,
-            ipAddress: clientIp,
-        });
-        
-        return response(200, { success: true }, origin);
-    }
-    
-    // --- CONFIG WRITE (admin only) ---
-    if (cleanPath === 'config/update' && method === 'POST') {
-        if (!isAdmin) return errorResponse(403, 'Admin only', null, origin);
-        
-        const validation = validate(UpdateConfigSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error, null, origin);
-        
-        const { maintenanceMode, allowRegistrations } = validation.data;
-        await query('UPDATE system_config SET maintenance_mode = $1, allow_registrations = $2 WHERE id = 1', [maintenanceMode, allowRegistrations]);
-        
-        await auditLog({
-            actorId: user.userId,
-            actorRole: user.role,
-            action: 'CONFIG_UPDATED',
-            metadata: { maintenanceMode, allowRegistrations },
-            ipAddress: clientIp,
-        });
-        
-        return response(200, { success: true }, origin);
-    }
-    
-    if (cleanPath === 'rates/update' && method === 'POST') {
-        if (!isAdmin) return errorResponse(403, 'Admin only', null, origin);
-        
-        const validation = validate(UpdateRatesSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error, null, origin);
-        
-        const { rates } = validation.data;
-        for (const [category, data] of Object.entries(rates)) {
-            await query(
-                'INSERT INTO waste_rates (category, rate, co2_saved_per_kg) VALUES ($1, $2, $3) ON CONFLICT (category) DO UPDATE SET rate = $2, co2_saved_per_kg = $3',
-                [category, data.rate, data.co2]
-            );
-        }
-        
-        await auditLog({
-            actorId: user.userId,
-            actorRole: user.role,
-            action: 'RATES_UPDATED',
-            metadata: { rates },
-            ipAddress: clientIp,
-        });
-        
-        return response(200, { success: true }, origin);
-    }
-
-    // --- BLOG WRITE (admin/staff) ---
-    if (cleanPath === 'blog' && method === 'POST') {
-        if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
-        
-        const validation = validate(CreateBlogPostSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error, null, origin);
-        
-        const p = validation.data;
-        const postId = `blog_${randomUUID()}`;
-        await query(
-            'INSERT INTO blog_posts (id, title, category, excerpt, image) VALUES ($1, $2, $3, $4, $5)',
-            [postId, p.title, p.category, p.excerpt, p.image]
-        );
-        
-        await auditLog({
-            actorId: user.userId,
-            actorRole: user.role,
-            action: 'BLOG_POST_CREATED',
-            targetType: 'blog_post',
-            targetId: postId,
-            metadata: { title: p.title },
-            ipAddress: clientIp,
-        });
-        
-        return response(201, { success: true, id: postId }, origin);
-    }
-    
-    if (cleanPath === 'blog' && method === 'DELETE') {
-        if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
-        
-        const validation = validate(DeleteBlogPostSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error, null, origin);
-        
-        await query('DELETE FROM blog_posts WHERE id = $1', [validation.data.id]);
-        
-        await auditLog({
-            actorId: user.userId,
-            actorRole: user.role,
-            action: 'BLOG_POST_DELETED',
-            targetType: 'blog_post',
-            targetId: validation.data.id,
-            ipAddress: clientIp,
-        });
-        
-        return response(200, { success: true }, origin);
-    }
-
-    // --- CERTIFICATES ---
-    if (cleanPath === 'certificates') {
-        if (method === 'GET') {
-            const { rows } = await query('SELECT * FROM certificates ORDER BY created_at DESC');
-            const certs = rows.map((c: any) => ({
-                id: c.id,
-                orgId: c.org_id,
-                orgName: c.org_name,
-                month: c.month,
-                year: c.year,
-                url: c.url,
-                dateIssued: c.created_at
-            }));
-            return response(200, certs, origin);
-        }
-        if (method === 'POST') {
-            if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
-            
-            const validation = validate(CreateCertificateSchema, body);
-            if (!validation.success) return errorResponse(400, validation.error, null, origin);
-            
-            const c = validation.data;
-            const certId = `cert_${randomUUID()}`;
-            await query(
-                'INSERT INTO certificates (id, org_id, org_name, month, year, url) VALUES ($1, $2, $3, $4, $5, $6)',
-                [certId, c.orgId, c.orgName, c.month, c.year, c.url]
-            );
-            
-            await auditLog({
-                actorId: user.userId,
-                actorRole: user.role,
-                action: 'CERTIFICATE_ISSUED',
-                targetType: 'certificate',
-                targetId: certId,
-                metadata: { orgId: c.orgId, month: c.month, year: c.year },
-                ipAddress: clientIp,
-            });
-            
-            return response(201, { success: true, id: certId }, origin);
-        }
-    }
-
-    // --- USERS ---
-    if (cleanPath === 'users') {
-      if (method === 'GET') {
-        let queryText = 'SELECT id, name, email, role, phone, avatar, zoints_balance, total_recycled_kg, is_active, gender, address, industry, esg_score, bank_name, account_number, account_name, created_at FROM users';
-        const params: any[] = [];
-
-        if (!isAdminOrStaff) {
-             queryText += ' WHERE id = $1 OR id IN (SELECT sender_id FROM messages WHERE receiver_id = $1) OR id IN (SELECT receiver_id FROM messages WHERE sender_id = $1)';
-             params.push(user.userId);
-        }
-
-        const { rows } = await query(queryText, params);
-        
-        const formattedUsers = rows.map((u: any) => {
-            if (isAdminOrStaff || u.id === user.userId) {
-                return {
-                    id: u.id,
-                    name: u.name,
-                    email: u.email,
-                    role: u.role,
-                    phone: u.phone,
-                    avatar: u.avatar,
-                    zointsBalance: parseFloat(u.zoints_balance),
-                    totalRecycledKg: parseFloat(u.total_recycled_kg),
-                    isActive: u.is_active,
-                    gender: u.gender,
-                    address: u.address,
-                    industry: u.industry,
-                    esgScore: u.esg_score,
-                    bankDetails: {
-                        bankName: u.bank_name,
-                        accountNumber: decrypt(u.account_number),
-                        accountName: u.account_name
-                    },
-                    createdAt: u.created_at
-                };
-            } 
-            
-            return {
-                id: u.id,
-                name: u.name,
-                role: u.role,
-                avatar: u.avatar,
-                isActive: u.is_active,
-                industry: u.industry,
-                esgScore: u.esg_score
-            };
-        });
-        
-        return response(200, formattedUsers, origin);
-      }
-      
-      if (method === 'POST') {
-        if (!isAdmin) return errorResponse(403, 'Only admins can create users manually', null, origin);
-        
-        const validation = validate(CreateUserSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error, null, origin);
-        
-        const { name, email, role, phone, password, gender, address, industry, avatar } = validation.data;
-        
-        const emailCheck = await query('SELECT id FROM users WHERE email = $1', [email]);
-        if (emailCheck.rows.length > 0) {
-            return errorResponse(409, 'Email already registered', null, origin);
-        }
-        
-        const passwordHash = await hashPassword(password);
-        const userId = `u_${randomUUID()}`;
-        
-        await query(
-            `INSERT INTO users (id, name, email, role, phone, avatar, password_hash, gender, address, industry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [userId, name, email, role, phone, avatar || '', passwordHash, gender, address, industry]
-        );
-        
-        await auditLog({
-            actorId: user.userId,
-            actorRole: user.role,
-            action: 'USER_CREATED_BY_ADMIN',
-            targetType: 'user',
-            targetId: userId,
-            metadata: { email, role },
-            ipAddress: clientIp,
-        });
-        
-        return response(201, { message: "User created", userId }, origin);
-      }
-
-      if (method === 'PUT') {
-          const validation = validate(UpdateUserSchema, body);
-          if (!validation.success) return errorResponse(400, validation.error, null, origin);
-          
-          const { id, updates } = validation.data;
-          if (user.userId !== id && !isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
-
-          const safeUpdates: any = { ...updates };
-          
-          if (!isAdminOrStaff) {
-              delete safeUpdates.zointsBalance;
-              delete safeUpdates.isActive;
-              delete safeUpdates.role;
-              delete safeUpdates.esgScore;
-          }
-          
-          if (!isAdmin) {
-              delete safeUpdates.zointsBalance;
-              delete safeUpdates.role;
-          }
-
-          const sensitiveChanges: any = {};
-          if (safeUpdates.isActive !== undefined) sensitiveChanges.isActive = safeUpdates.isActive;
-          if (safeUpdates.zointsBalance !== undefined) sensitiveChanges.zointsBalance = safeUpdates.zointsBalance;
-          if (safeUpdates.role !== undefined) sensitiveChanges.role = safeUpdates.role;
-          if (safeUpdates.esgScore !== undefined) sensitiveChanges.esgScore = safeUpdates.esgScore;
-
-          if (safeUpdates.isActive !== undefined) await query('UPDATE users SET is_active = $1 WHERE id = $2', [safeUpdates.isActive, id]);
-          if (safeUpdates.zointsBalance !== undefined) await query('UPDATE users SET zoints_balance = $1 WHERE id = $2', [safeUpdates.zointsBalance, id]);
-          if (safeUpdates.gender !== undefined) await query('UPDATE users SET gender = $1 WHERE id = $2', [safeUpdates.gender, id]);
-          if (safeUpdates.address !== undefined) await query('UPDATE users SET address = $1 WHERE id = $2', [safeUpdates.address, id]);
-          if (safeUpdates.industry !== undefined) await query('UPDATE users SET industry = $1 WHERE id = $2', [safeUpdates.industry, id]);
-          if (safeUpdates.name !== undefined) await query('UPDATE users SET name = $1 WHERE id = $2', [safeUpdates.name, id]);
-          if (safeUpdates.phone !== undefined) await query('UPDATE users SET phone = $1 WHERE id = $2', [safeUpdates.phone, id]);
-          if (safeUpdates.avatar !== undefined) await query('UPDATE users SET avatar = $1 WHERE id = $2', [safeUpdates.avatar, id]);
-          if (safeUpdates.esgScore !== undefined) await query('UPDATE users SET esg_score = $1 WHERE id = $2', [safeUpdates.esgScore, id]);
-          if (safeUpdates.role !== undefined) await query('UPDATE users SET role = $1 WHERE id = $2', [safeUpdates.role, id]);
-          if (safeUpdates.bankDetails) {
-              const encryptedAccNum = encrypt(safeUpdates.bankDetails.accountNumber);
-              await query(
-                  'UPDATE users SET bank_name = $1, account_number = $2, account_name = $3 WHERE id = $4',
-                  [safeUpdates.bankDetails.bankName, encryptedAccNum, safeUpdates.bankDetails.accountName, id]
-              );
-          }
-          
-          if (Object.keys(sensitiveChanges).length > 0) {
-              await auditLog({
-                  actorId: user.userId,
-                  actorRole: user.role,
-                  action: 'USER_UPDATED_PRIVILEGED',
-                  targetType: 'user',
-                  targetId: id,
-                  metadata: sensitiveChanges,
-                  ipAddress: clientIp,
-              });
-          }
-          
-          return response(200, { success: true }, origin);
-      }
-    }
-
-    // --- PICKUPS ---
-    if (cleanPath === 'pickups') {
-      if (method === 'GET') {
-        const { rows } = await query('SELECT * FROM pickups ORDER BY created_at DESC');
-        let filteredRows = rows;
-        if (!isAdminOrStaff && user.role !== 'COLLECTOR') {
-            filteredRows = rows.filter((r: any) => r.user_id === user.userId);
-        }
-        const pickups = filteredRows.map((p: any) => ({
-            ...p,
-            userId: p.user_id,
-            phoneNumber: p.phone_number,
-            wasteImage: p.waste_image,
-            earnedZoints: parseFloat(p.earned_zoints || 0),
-            weight: parseFloat(p.weight || 0),
-            collectionDetails: p.collection_details
-        }));
-        return response(200, pickups, origin);
-      }
-
-      if (method === 'POST') {
-        const validation = validate(CreatePickupSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error, null, origin);
-        
-        const p = validation.data;
-        if (p.userId !== user.userId && !isAdminOrStaff) return errorResponse(403, 'Cannot schedule for others', null, origin);
-        
-        const pickupId = `P-${randomUUID().substring(0,8).toUpperCase()}`;
-
-        await query(
-            `INSERT INTO pickups (id, user_id, location, time, date, items, status, contact, phone_number, waste_image) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [pickupId, p.userId, p.location, p.time, p.date, p.items, 'Pending', p.contact, p.phoneNumber, p.wasteImage]
-        );
-        return response(201, { success: true, id: pickupId }, origin);
-      }
-
-      if (method === 'PUT') {
-          const validation = validate(UpdatePickupSchema, body);
-          if (!validation.success) return errorResponse(400, validation.error, null, origin);
-          
-          const { id, updates } = validation.data;
-          
-          const pickupRes = await query('SELECT * FROM pickups WHERE id = $1', [id]);
-          if (pickupRes.rows.length === 0) return errorResponse(404, 'Pickup not found', null, origin);
-          const currentPickup = pickupRes.rows[0];
-          
-          if (updates.driver !== undefined) {
-              if (!isAdminOrStaff) return errorResponse(403, 'Only staff can assign drivers', null, origin);
-              await query('UPDATE pickups SET driver = $1 WHERE id = $2', [updates.driver, id]);
-              
-              await auditLog({
-                  actorId: user.userId,
-                  actorRole: user.role,
-                  action: 'PICKUP_DRIVER_ASSIGNED',
-                  targetType: 'pickup',
-                  targetId: id,
-                  metadata: { driver: updates.driver },
-                  ipAddress: clientIp,
-              });
-          }
-          
-          if (updates.weight !== undefined) {
-              if (!isAdminOrStaff && user.role !== 'COLLECTOR') {
-                  return errorResponse(403, 'Forbidden', null, origin);
-              }
-              
-              if (user.role === 'COLLECTOR') {
-                  const collectorRes = await query('SELECT name FROM users WHERE id = $1', [user.userId]);
-                  const collectorName = collectorRes.rows[0]?.name;
-                  if (currentPickup.driver !== collectorName) {
-                      return errorResponse(403, 'You are not assigned to this pickup', null, origin);
-                  }
-              }
-              
-              if (currentPickup.status === 'Completed') {
-                  return errorResponse(409, 'Pickup already completed', null, origin);
-              }
-              
-              if (updates.collectionDetails && updates.earnedZoints !== undefined) {
-                  const calculatedTotal = updates.collectionDetails.reduce(
-                      (sum, item) => sum + (item.earned || 0), 0
-                  );
-                  if (Math.abs(calculatedTotal - updates.earnedZoints) > 1) {
-                      return errorResponse(400, 'Earnings do not match collection details', null, origin);
-                  }
-              }
-              
-              const newStatus = updates.status || 'Completed';
-              const updateResult = await query(
-                  `UPDATE pickups 
-                   SET status = $1, weight = $2, earned_zoints = $3, collection_details = $4 
-                   WHERE id = $5 AND status != 'Completed' 
-                   RETURNING user_id`,
-                  [newStatus, updates.weight, updates.earnedZoints || 0, JSON.stringify(updates.collectionDetails || []), id]
-              );
-              
-              if (updateResult.rows.length > 0 && updates.earnedZoints && updates.earnedZoints > 0) {
-                  await query(
-                      'UPDATE users SET zoints_balance = zoints_balance + $1 WHERE id = $2',
-                      [updates.earnedZoints, updateResult.rows[0].user_id]
-                  );
-                  
-                  await auditLog({
-                      actorId: user.userId,
-                      actorRole: user.role,
-                      action: 'PICKUP_COMPLETED',
-                      targetType: 'pickup',
-                      targetId: id,
-                      metadata: { 
-                          userId: updateResult.rows[0].user_id,
-                          weight: updates.weight, 
-                          earnedZoints: updates.earnedZoints 
-                      },
-                      ipAddress: clientIp,
-                  });
-              }
-              
-              return response(200, { success: true }, origin);
-          }
-          
-          if (updates.status !== undefined && updates.weight === undefined) {
-              if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
-              
-              if (updates.status === 'Completed') {
-                  return errorResponse(400, 'Cannot mark Completed without collection details', null, origin);
-              }
-              
-              await query('UPDATE pickups SET status = $1 WHERE id = $2', [updates.status, id]);
-              
-              await auditLog({
-                  actorId: user.userId,
-                  actorRole: user.role,
-                  action: 'PICKUP_STATUS_CHANGED',
-                  targetType: 'pickup',
-                  targetId: id,
-                  metadata: { from: currentPickup.status, to: updates.status },
-                  ipAddress: clientIp,
-              });
-          }
-          
-          return response(200, { success: true }, origin);
-      }
-    }
-
-    // --- REDEMPTION ---
-    if (cleanPath === 'redemption') {
-        if (method === 'GET') {
-            const { rows } = await query('SELECT * FROM redemption_requests ORDER BY created_at DESC');
-            let filteredRows = rows;
-            if (!isAdminOrStaff) {
-                filteredRows = rows.filter((r: any) => r.user_id === user.userId);
-            }
-            const requests = filteredRows.map((r: any) => ({
-                id: r.id,
-                userId: r.user_id,
-                userName: r.user_name,
-                type: r.type,
-                amount: parseFloat(r.amount),
-                status: r.status,
-                date: r.date
-            }));
-            return response(200, requests, origin);
-        }
-        if (method === 'POST') {
-            const validation = validate(CreateRedemptionSchema, body);
-            if (!validation.success) return errorResponse(400, validation.error, null, origin);
-            
-            const r = validation.data;
-            if (r.userId !== user.userId) return errorResponse(403, 'Forbidden', null, origin);
-            
-            const balanceCheck = await query('SELECT zoints_balance FROM users WHERE id = $1', [user.userId]);
-            if (balanceCheck.rows.length === 0) return errorResponse(404, 'User not found', null, origin);
-            const currentBalance = parseFloat(balanceCheck.rows[0].zoints_balance);
-            
-            if (currentBalance < r.amount) {
-                return errorResponse(400, 'Insufficient balance', null, origin);
-            }
-
-            const reqId = `REQ-${randomUUID().substring(0,8).toUpperCase()}`;
-
-            await query('BEGIN');
-            try {
-                await query(
-                    `INSERT INTO redemption_requests (id, user_id, user_name, type, amount, status, date, refunded) VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE)`,
-                    [reqId, r.userId, r.userName, r.type, r.amount, r.status, r.date]
-                );
-                await query(
-                    `UPDATE users SET zoints_balance = zoints_balance - $1 WHERE id = $2 AND zoints_balance >= $1`,
-                    [r.amount, r.userId]
-                );
-                await query('COMMIT');
-                
-                await auditLog({
-                    actorId: user.userId,
-                    actorRole: user.role,
-                    action: 'REDEMPTION_REQUESTED',
-                    targetType: 'redemption',
-                    targetId: reqId,
-                    metadata: { type: r.type, amount: r.amount },
-                    ipAddress: clientIp,
-                });
-                
-                return response(201, { success: true, id: reqId }, origin);
-            } catch (e) {
-                await query('ROLLBACK');
-                throw e;
-            }
-        }
-        if (method === 'PUT') {
-            if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
-            
-            const validation = validate(UpdateRedemptionSchema, body);
-            if (!validation.success) return errorResponse(400, validation.error, null, origin);
-            
-            const { id, status } = validation.data;
-            
-            const reqRes = await query('SELECT * FROM redemption_requests WHERE id = $1', [id]);
-            if (reqRes.rows.length === 0) return errorResponse(404, 'Request not found', null, origin);
-            const currentReq = reqRes.rows[0];
-            
-            if (status === 'Rejected') {
-                if (currentReq.status === 'Pending' && !currentReq.refunded) {
-                    await query('BEGIN');
-                    try {
-                        await query(
-                            'UPDATE redemption_requests SET status = $1, refunded = TRUE WHERE id = $2',
-                            [status, id]
-                        );
-                        await query(
-                            'UPDATE users SET zoints_balance = zoints_balance + $1 WHERE id = $2',
-                            [parseFloat(currentReq.amount), currentReq.user_id]
-                        );
-                        await query('COMMIT');
-                    } catch (e) {
-                        await query('ROLLBACK');
-                        throw e;
-                    }
-                } else {
-                    await query('UPDATE redemption_requests SET status = $1 WHERE id = $2', [status, id]);
-                }
-            } else {
-                await query('UPDATE redemption_requests SET status = $1 WHERE id = $2', [status, id]);
-            }
-            
-            await auditLog({
-                actorId: user.userId,
-                actorRole: user.role,
-                action: status === 'Approved' ? 'REDEMPTION_APPROVED' : 'REDEMPTION_REJECTED',
-                targetType: 'redemption',
-                targetId: id,
-                metadata: { 
-                    userId: currentReq.user_id, 
-                    amount: parseFloat(currentReq.amount),
-                    previousStatus: currentReq.status,
-                },
-                ipAddress: clientIp,
-            });
-            
-            return response(200, { success: true }, origin);
-        }
-    }
-
-    // --- MESSAGES ---
-    if (cleanPath === 'messages') {
-        if (method === 'GET') {
-            const { rows } = await query('SELECT * FROM messages WHERE sender_id = $1 OR receiver_id = $1 ORDER BY created_at ASC', [user.userId]);
-            const messages = rows.map((m: any) => ({
-                id: m.id,
-                senderId: m.sender_id,
-                receiverId: m.receiver_id,
-                content: m.content,
-                createdAt: m.created_at,
-                isRead: m.is_read
-            }));
-            return response(200, messages, origin);
-        }
-        if (method === 'POST') {
-            if (!(await checkMessagesLimit(`msg:${user.userId}`))) {
-                return errorResponse(429, 'You are sending messages too quickly. Please slow down.', null, origin);
-            }
-            
-            const validation = validate(CreateMessageSchema, body);
-            if (!validation.success) return errorResponse(400, validation.error, null, origin);
-            
-            const m = validation.data;
-            if (m.senderId !== user.userId) return errorResponse(403, 'Identity mismatch', null, origin);
-            
-            const receiverCheck = await query('SELECT id FROM users WHERE id = $1', [m.receiverId]);
-            if (receiverCheck.rows.length === 0) return errorResponse(404, 'Recipient not found', null, origin);
-            
-            const msgId = `msg_${randomUUID()}`;
-            await query(
-                'INSERT INTO messages (id, sender_id, receiver_id, content) VALUES ($1, $2, $3, $4)',
-                [msgId, m.senderId, m.receiverId, m.content]
-            );
-            return response(201, { success: true, id: msgId }, origin);
-        }
-    }
-
-    return errorResponse(404, `Endpoint not found: ${cleanPath}`, null, origin);
-
-  } catch (err: any) {
-    return errorResponse(500, 'An unexpected error occurred', err, origin);
-  }
-};
+    if (cleanPath === 'auth/change-password/initiate

@@ -2,20 +2,12 @@ import { z } from 'zod';
 
 // ============================================================
 // ZILCYCLER INPUT VALIDATORS
-// Centralized Zod schemas for all API endpoints
 // ============================================================
 
 // --- Role Enums ---
-// Roles a user is allowed to self-register as via public signup
 export const PublicRegistrationRoleSchema = z.enum(['HOUSEHOLD', 'ORGANIZATION']);
-
-// All valid roles (used for admin-created accounts)
 export const UserRoleSchema = z.enum(['HOUSEHOLD', 'ORGANIZATION', 'COLLECTOR', 'STAFF', 'ADMIN']);
-
-// Pickup statuses
 export const PickupStatusSchema = z.enum(['Pending', 'Assigned', 'Completed', 'Missed']);
-
-// Redemption statuses
 export const RedemptionStatusSchema = z.enum(['Pending', 'Approved', 'Rejected']);
 
 // --- Common Field Schemas ---
@@ -43,7 +35,6 @@ export const RegisterSchema = z.object({
     name: NameSchema,
     email: EmailSchema,
     phone: PhoneSchema,
-    // CRITICAL: Only HOUSEHOLD and ORGANIZATION allowed via public registration
     role: PublicRegistrationRoleSchema,
     avatar: z.string().max(2000).optional().default(''),
     gender: z.string().trim().max(50).optional().default(''),
@@ -52,6 +43,9 @@ export const RegisterSchema = z.object({
   }),
   password: PasswordSchema,
   otp: OtpSchema,
+  acceptedTerms: z.literal(true, { 
+    errorMap: () => ({ message: 'You must accept the Terms of Service and Privacy Policy' }) 
+  }),
 });
 
 export const ForgotPasswordSchema = z.object({
@@ -75,7 +69,40 @@ export const ChangePasswordConfirmSchema = z.object({
   newPassword: PasswordSchema,
 });
 
-// --- Cloudinary upload folder allowlist (Stage 1B) ---
+// --- STAGE 2C: Account Deletion Schemas ---
+
+export const DeleteAccountInitiateSchema = z.object({
+  userId: z.string().min(1).max(255),
+  password: z.string().min(1).max(128),
+});
+
+export const DeleteAccountConfirmSchema = z.object({
+  userId: z.string().min(1).max(255),
+  otp: OtpSchema,
+  reason: z.string().trim().max(500).optional().default(''),
+});
+
+// --- STAGE 2C: Error Logging Schema ---
+
+export const LogErrorSchema = z.object({
+  errorType: z.string().trim().max(100),
+  errorMessage: z.string().trim().max(2000),
+  errorStack: z.string().max(10000).optional(),
+  userAgent: z.string().max(500).optional(),
+  appVersion: z.string().max(20).optional(),
+  platform: z.enum(['web', 'android', 'ios', 'unknown']).optional().default('unknown'),
+  url: z.string().max(2000).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
+});
+
+// --- STAGE 2C: Version Check Schema ---
+
+export const VersionCheckSchema = z.object({
+  platform: z.enum(['web', 'android', 'ios']),
+  currentVersion: z.string().regex(/^\d+\.\d+\.\d+$/, 'Version must be semver (e.g., 1.0.0)'),
+});
+
+// --- Cloudinary upload folder allowlist ---
 export const ALLOWED_UPLOAD_FOLDERS = [
   'zilcycler_general',
   'zilcycler_avatars',
@@ -93,7 +120,6 @@ export const SignUploadSchema = z.object({
 export const CreateUserSchema = z.object({
   name: NameSchema,
   email: EmailSchema,
-  // Admins can create any role except another ADMIN (defensive)
   role: z.enum(['HOUSEHOLD', 'ORGANIZATION', 'COLLECTOR', 'STAFF']),
   phone: PhoneSchema,
   password: PasswordSchema,
@@ -118,7 +144,6 @@ export const UpdateUserSchema = z.object({
     gender: z.string().trim().max(50).optional(),
     address: SafeStringSchema.optional(),
     industry: z.string().trim().max(100).optional(),
-    // Privileged fields - role check enforced in handler
     isActive: z.boolean().optional(),
     zointsBalance: z.number().min(0).max(10_000_000).optional(),
     role: UserRoleSchema.optional(),
@@ -223,7 +248,6 @@ export const CreateCertificateSchema = z.object({
 });
 
 // --- Helper: safe parse with formatted error ---
-// Type definition with explicit discriminated union for TypeScript narrowing
 export type ValidationResult<T> = 
   | { success: true; data: T; error?: undefined }
   | { success: false; error: string; data?: undefined };
@@ -233,7 +257,6 @@ export const validate = <T>(schema: z.ZodSchema<T>, data: unknown): ValidationRe
   if (result.success) {
     return { success: true, data: result.data };
   }
-  // Return first error message for clean API response
   const firstError = result.error.errors[0];
   const path = firstError.path.join('.');
   const msg = path ? `${path}: ${firstError.message}` : firstError.message;
