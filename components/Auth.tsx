@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { UserRole, User } from '../types';
 import { useApp } from '../context/AppContext';
-import { Recycle, Building2, Truck, User as UserIcon, ArrowLeft, AlertTriangle, Lock, Eye, EyeOff, KeyRound, Mail, CheckCircle, ChevronDown } from 'lucide-react';
+import { Recycle, Building2, User as UserIcon, ArrowLeft, AlertTriangle, Lock, Eye, EyeOff, KeyRound, Mail, CheckCircle, ChevronDown } from 'lucide-react';
 
 interface AuthProps {
-  onLogin: (userId: string, token: string) => void;
+  onLogin: (userId: string, token: string) => Promise<void>;
 }
 
 type AuthView = 'landing' | 'login' | 'signup_household' | 'signup_org' | 'signup_verify' | 'forgot_password_request' | 'forgot_password_verify';
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
-  const { sysConfig, users, login, requestPasswordReset, resetPassword, sendSignupVerification, registerUser } = useApp();
+  const { sysConfig, login, requestPasswordReset, resetPassword, sendSignupVerification, registerUser } = useApp();
   const [view, setView] = useState<AuthView>('landing');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -83,7 +83,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             return;
         }
 
-        // Maintenance Mode Check
         if (sysConfig.maintenanceMode) {
             if (user.role !== UserRole.ADMIN && user.role !== UserRole.STAFF) {
                 alert("⚠️ SYSTEM UNDER MAINTENANCE\n\nAccess is currently restricted to Admin and Staff only. Please check back later.");
@@ -92,7 +91,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             }
         }
 
-        onLogin(user.id, token);
+        await onLogin(user.id, token);
     } catch (error: any) {
         console.error("Login Error", error);
         setValidationError(error.message || "Invalid email or password.");
@@ -146,7 +145,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       }
   };
 
-  // Step 1: Request Verification OTP
   const handleSignupSubmit = async (e: React.FormEvent, role: UserRole) => {
     e.preventDefault();
     setValidationError('');
@@ -158,7 +156,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
          return;
     }
 
-    // 1. Phone Validation
     const phoneRegex = /^[0-9+\-\s()]{10,}$/;
     if (!phoneRegex.test(signupData.phone)) {
         setValidationError("Please enter a valid phone number (min 10 digits).");
@@ -166,7 +163,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         return;
     }
 
-    // 2. Password Strength Validation
     if (signupData.password.length < 8) {
         setValidationError("Password must be at least 8 characters long.");
         setIsSubmitting(false);
@@ -183,7 +179,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         return;
     }
 
-    // 3. Confirm Password Match
     if (signupData.password !== signupData.confirmPassword) {
         setValidationError("Passwords do not match.");
         setIsSubmitting(false);
@@ -191,13 +186,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     }
 
     try {
-        // Send OTP via email
         await sendSignupVerification(signupData.email);
         setSuccessMessage("Verification code sent to email.");
-        setSignupData(prev => ({ ...prev, role })); // Ensure role is set
+        setSignupData(prev => ({ ...prev, role }));
         setTimeout(() => {
              setSuccessMessage('');
-             setView('signup_verify'); // Switch to verification view
+             setView('signup_verify');
              setIsSubmitting(false);
         }, 1500);
     } catch (error: any) {
@@ -207,22 +201,21 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     }
   };
 
-  // Step 2: Verify OTP and Register
   const handleSignupVerify = async (e: React.FormEvent) => {
       e.preventDefault();
       setValidationError('');
       setIsSubmitting(true);
 
       const newUser: User = {
-          id: '', // Server will generate
+          id: '',
           name: signupData.fullName,
           email: signupData.email,
           phone: signupData.phone,
           role: signupData.role,
-          avatar: '', // No default random avatar
+          avatar: '',
           gender: signupData.gender,
           address: signupData.address,
-          industry: signupData.industry, // Only used if Organization
+          industry: signupData.industry,
           zointsBalance: 0,
           isActive: true,
           totalRecycledKg: 0
@@ -341,11 +334,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 />
             </div>
             
-            {/* Phone Number Field */}
             <div>
                 <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">Phone Number</label>
                 <input 
                     type="tel" 
+                    inputMode="tel"
                     value={signupData.phone}
                     onChange={(e) => setSignupData({...signupData, phone: e.target.value})}
                     placeholder="+234..."
@@ -354,7 +347,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 />
             </div>
 
-            {/* Gender Field */}
             <div>
                 <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">
                     {role === UserRole.HOUSEHOLD ? 'Gender' : 'Rep Gender'}
@@ -375,7 +367,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 </div>
             </div>
 
-            {/* Address Field */}
             <div>
                 <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">
                     {role === UserRole.HOUSEHOLD ? 'Home Address' : 'Company Address'}
@@ -389,7 +380,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 />
             </div>
 
-            {/* Industry Field (Organizations Only) */}
             {role === UserRole.ORGANIZATION && (
                 <div>
                     <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">Industry Type</label>
@@ -412,7 +402,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 </div>
             )}
 
-            {/* Password Fields */}
             <div>
                 <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">Password</label>
                 <div className="relative">
@@ -478,7 +467,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
         {view === 'signup_org' && renderSignupForm(UserRole.ORGANIZATION, 'Organization Join', <Building2 className="w-8 h-8"/>)}
 
-        {/* SIGNUP VERIFICATION */}
         {view === 'signup_verify' && (
             <form onSubmit={handleSignupVerify} className="w-full max-w-sm space-y-4 animate-fade-in-up bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 relative">
                 <button type="button" onClick={() => setView(signupData.role === UserRole.ORGANIZATION ? 'signup_org' : 'signup_household')} className="absolute top-4 left-4 text-white hover:text-green-200 transition-colors">
@@ -507,6 +495,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">Verification Code</label>
                     <input 
                         type="text" 
+                        inputMode="numeric"
                         value={signupOtp}
                         onChange={(e) => setSignupOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                         className="w-full p-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder-green-100/50 focus:outline-none focus:bg-white/30 focus:border-white/50 transition-all text-center tracking-[0.5em] font-bold text-lg" 
@@ -581,7 +570,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </form>
         )}
 
-        {/* FORGOT PASSWORD: STEP 1 (EMAIL) */}
         {view === 'forgot_password_request' && (
             <form onSubmit={handleRequestReset} className="w-full max-w-sm space-y-4 animate-fade-in-up bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 relative">
                 <button type="button" onClick={() => resetForm('login')} className="absolute top-4 left-4 text-white hover:text-green-200 transition-colors">
@@ -632,7 +620,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </form>
         )}
 
-        {/* FORGOT PASSWORD: STEP 2 (OTP & NEW PASS) */}
         {view === 'forgot_password_verify' && (
             <form onSubmit={handleVerifyReset} className="w-full max-w-sm space-y-4 animate-fade-in-up bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 relative">
                 <button type="button" onClick={() => setView('forgot_password_request')} className="absolute top-4 left-4 text-white hover:text-green-200 transition-colors">
@@ -659,6 +646,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         <label className="text-green-100 text-xs font-bold ml-1 uppercase tracking-wide">6-Digit OTP</label>
                         <input 
                             type="text" 
+                            inputMode="numeric"
                             value={resetOtp}
                             onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                             className="w-full p-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder-green-100/50 focus:outline-none focus:bg-white/30 focus:border-white/50 transition-all text-center tracking-[0.5em] font-bold text-lg" 

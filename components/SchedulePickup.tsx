@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { User, PickupTask } from '../types';
-import { Calendar, Clock, Camera, MapPin, CheckCircle, Upload, Phone, Loader2 } from 'lucide-react';
+import { Calendar, Clock, Camera, MapPin, CheckCircle, Phone, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { getToken } from '../utils/storage';
+import { API_BASE_URL } from '../constants';
 
 interface SchedulePickupProps {
   user: User;
@@ -27,14 +29,12 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
   const [success, setSuccess] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
-  // File State
   const [fileName, setFileName] = useState<string | null>(null);
-  const [wasteFile, setWasteFile] = useState<File | null>(null); // Store raw file for upload
-  const [previewImage, setPreviewImage] = useState<string | undefined>(undefined); // Base64 for local preview only
+  const [wasteFile, setWasteFile] = useState<File | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | undefined>(undefined);
   
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   
-  // Form State
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [phone, setPhone] = useState('');
@@ -56,14 +56,13 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
         validateImage(file);
       } catch (err: any) {
         alert(err.message);
-        e.target.value = ''; // Reset input
+        e.target.value = '';
         return;
       }
 
       setFileName(file.name);
       setWasteFile(file);
       
-      // Convert to Base64 for local preview UI only
       const reader = new FileReader();
       reader.onloadend = () => {
           setPreviewImage(reader.result as string);
@@ -74,15 +73,13 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
 
   const uploadToCloudinary = async (file: File): Promise<string | null> => {
       try {
-          // 1. Get Authentication Token
-          const token = localStorage.getItem('zilcycler_token');
+          const token = await getToken();
           if (!token) {
               alert("You must be logged in to upload images.");
               return null;
           }
 
-          // 2. Request Signature from Backend
-          const signRes = await fetch('/api/auth/sign-upload', {
+          const signRes = await fetch(`${API_BASE_URL}/auth/sign-upload`, {
               method: 'POST',
               headers: {
                   'Content-Type': 'application/json',
@@ -97,7 +94,6 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
 
           const { signature, timestamp, apiKey, cloudName, folder } = await signRes.json();
 
-          // 3. Prepare Form Data for Cloudinary
           const formData = new FormData();
           formData.append('file', file);
           formData.append('api_key', apiKey);
@@ -105,7 +101,6 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
           formData.append('signature', signature);
           formData.append('folder', folder);
 
-          // 4. Upload to Cloudinary
           const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
               method: 'POST',
               body: formData
@@ -135,18 +130,17 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
     setIsUploading(true);
     let finalImageUrl = undefined;
 
-    // Upload Image if selected
     if (wasteFile) {
         const url = await uploadToCloudinary(wasteFile);
         if (!url) {
             setIsUploading(false);
-            return; // Stop if upload failed
+            return;
         }
         finalImageUrl = url;
     }
 
     const newTask: PickupTask = {
-        id: '', // Server generated
+        id: '',
         userId: user.id,
         location: address,
         time: time,
@@ -158,7 +152,6 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
         wasteImage: finalImageUrl
     };
 
-    // Add to Global Context
     await schedulePickup(newTask);
 
     setIsUploading(false);
@@ -188,7 +181,6 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Waste Type */}
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <label className="block text-sm font-medium text-gray-700 mb-2">Waste Type (Select all that apply)</label>
           <div className="grid grid-cols-2 gap-3">
@@ -210,7 +202,6 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
           </div>
         </div>
 
-        {/* Date & Time */}
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
@@ -242,14 +233,14 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
           </div>
         </div>
 
-        {/* Contact Info & Address */}
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Calling Number</label>
             <div className="relative">
               <Phone className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
               <input 
-                  type="tel" 
+                  type="tel"
+                  inputMode="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   disabled={isUploading}
@@ -277,7 +268,6 @@ const SchedulePickup: React.FC<SchedulePickupProps> = ({ user, onBack, onSubmit 
           </div>
         </div>
 
-        {/* Image Upload */}
         <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <label className="block text-sm font-medium text-gray-700 mb-2">Photo of Waste (Optional)</label>
           <div className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${fileName ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:bg-gray-50'}`}>

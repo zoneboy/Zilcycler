@@ -1,444 +1,493 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { PickupTask, UserRole, WasteRates, SystemConfig, User, RedemptionRequest, BlogPost, DropOffLocation, Message, Certificate } from '../types';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { 
+    User, 
+    UserRole, 
+    PickupTask, 
+    BlogPost, 
+    DropOffLocation, 
+    SystemConfig, 
+    WasteRates, 
+    RedemptionRequest,
+    Message,
+    Certificate
+} from '../types';
 import { API_BASE_URL } from '../constants';
+import { getToken } from '../utils/storage';
+
+// ============================================================
+// CONTEXT TYPES
+// ============================================================
 
 interface AppContextType {
-  pickups: PickupTask[];
-  wasteRates: WasteRates;
-  sysConfig: SystemConfig;
+  // Data
   users: User[];
-  redemptionRequests: RedemptionRequest[];
+  pickups: PickupTask[];
   blogPosts: BlogPost[];
   dropOffLocations: DropOffLocation[];
+  redemptionRequests: RedemptionRequest[];
   messages: Message[];
   certificates: Certificate[];
-  schedulePickup: (task: PickupTask) => void;
-  updatePickup: (id: string, updates: Partial<PickupTask>) => void;
-  getPickupsByRole: (role: UserRole, userId?: string) => PickupTask[];
-  updateWasteRates: (newRates: WasteRates) => void;
-  updateSysConfig: (config: SystemConfig) => void;
-  updateUser: (id: string, updates: Partial<User>) => void;
+  sysConfig: SystemConfig;
+  wasteRates: WasteRates;
+  loading: boolean;
+  
+  // Auth
   login: (email: string, password: string) => Promise<{ user: User; token: string }>;
-  verifySession: (token: string) => Promise<{ userId: string; valid: boolean }>;
+  verifySession: (token: string) => Promise<{ userId: string }>;
   requestPasswordReset: (email: string) => Promise<void>;
   resetPassword: (email: string, otp: string, newPassword: string) => Promise<void>;
+  sendSignupVerification: (email: string) => Promise<void>;
+  registerUser: (user: User, password: string, otp: string) => Promise<void>;
   initiateChangePassword: (userId: string, currentPassword: string) => Promise<void>;
   confirmChangePassword: (userId: string, otp: string, newPassword: string) => Promise<void>;
-  addUser: (user: User, password?: string) => Promise<void>;
-  registerUser: (user: User, password: string, otp: string) => Promise<void>;
-  sendSignupVerification: (email: string) => Promise<void>;
-  createRedemptionRequest: (req: RedemptionRequest) => void;
-  updateRedemptionStatus: (id: string, status: 'Approved' | 'Rejected') => void;
-  addBlogPost: (post: BlogPost) => void;
-  deleteBlogPost: (id: string) => void;
-  sendMessage: (msg: Message) => void;
-  addCertificate: (cert: Certificate) => void;
-  refreshData: () => Promise<void>; // Exposed to trigger refresh after login
-  loading: boolean;
+  
+  // User
+  addUser: (user: User, password: string) => Promise<void>;
+  updateUser: (id: string, updates: Partial<User>) => Promise<void>;
+  
+  // Pickups
+  schedulePickup: (pickup: PickupTask) => Promise<void>;
+  updatePickup: (id: string, updates: Partial<PickupTask>) => Promise<void>;
+  getPickupsByRole: (role: UserRole, userId?: string) => PickupTask[];
+  
+  // Redemption
+  createRedemptionRequest: (req: RedemptionRequest) => Promise<void>;
+  updateRedemptionStatus: (id: string, status: 'Approved' | 'Rejected') => Promise<void>;
+  
+  // Messages
+  sendMessage: (msg: Message) => Promise<void>;
+  
+  // Config
+  updateSysConfig: (config: SystemConfig) => Promise<void>;
+  updateWasteRates: (rates: WasteRates) => Promise<void>;
+  
+  // Blog
+  addBlogPost: (post: BlogPost) => Promise<void>;
+  deleteBlogPost: (id: string) => Promise<void>;
+  
+  // Certificates
+  addCertificate: (cert: Certificate) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState('');
-  
-  // Data States
-  const [pickups, setPickups] = useState<PickupTask[]>([]);
-  const [wasteRates, setWasteRates] = useState<WasteRates>({});
-  const [sysConfig, setSysConfig] = useState<SystemConfig>({ maintenanceMode: false, allowRegistrations: true });
-  const [users, setUsers] = useState<User[]>([]);
-  const [redemptionRequests, setRedemptionRequests] = useState<RedemptionRequest[]>([]);
-  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
-  const [dropOffLocations, setDropOffLocations] = useState<DropOffLocation[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [certificates, setCertificates] = useState<Certificate[]>([]);
+// ============================================================
+// API HELPER
+// Centralized fetch wrapper with auth + error handling
+// ============================================================
 
-  // Helper to get Auth Headers
-  const getAuthHeaders = () => {
-      const token = localStorage.getItem('zilcycler_token');
-      return token ? { 'Authorization': `Bearer ${token}` } : {};
-  };
-
-  // Helper for safe fetch with Timeout and Logging
-  const safeFetch = async (endpoint: string, options: RequestInit = {}) => {
-      const url = `${API_BASE_URL}${endpoint}`;
-      console.log(`[API] Req: ${endpoint}`); // Debug Log for Android Studio
-
-      // Add 15s Timeout to prevent hanging
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-      try {
-          const res = await fetch(url, { ...options, signal: controller.signal });
-          clearTimeout(timeoutId);
-          
-          // Check for HTML response (usually 404 or 500 error page from server/proxy)
-          const contentType = res.headers.get("content-type");
-          if (contentType && contentType.includes("text/html")) {
-              const text = await res.text();
-              console.error(`[API] HTML Error from ${url}:`, text.substring(0, 100));
-              throw new Error(`Server Error: Endpoint returned HTML instead of JSON at ${endpoint}`);
-          }
-
-          if (!res.ok) {
-              // Try to parse error JSON
-              let errorMessage = res.statusText;
-              try {
-                  const errorData = await res.json();
-                  errorMessage = errorData.error || errorMessage;
-              } catch (e) {
-                  // If JSON parse fails, use status text
-              }
-              console.error(`[API] Error ${res.status} from ${endpoint}:`, errorMessage);
-              throw new Error(errorMessage);
-          }
-          
-          const json = await res.json();
-          // console.log(`[API] Success: ${endpoint}`); // Uncomment for verbose success logs
-          return json;
-      } catch (error: any) {
-          clearTimeout(timeoutId);
-          if (error.name === 'AbortError') {
-             console.error(`[API] Timeout: ${endpoint} took too long.`);
-             throw new Error("Request timed out. Please check your connection.");
-          }
-          if (error.message === 'Failed to fetch') {
-             console.error(`[API] CORS or Network Error for ${endpoint}`);
-             throw new Error("Unable to connect to server. Please check your internet connection and try again.");
-          }
-          console.error(`[API] Network Error for ${endpoint}:`, error);
-          throw error;
-      }
-  };
-
-  const fetchAllData = async () => {
-    try {
-        const token = localStorage.getItem('zilcycler_token');
-        if (!token) {
-            setLoading(false);
-            return;
+const apiCall = async (endpoint: string, options: RequestInit = {}) => {
+    const token = await getToken();
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(options.headers as Record<string, string> || {}),
+    };
+    
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+        ...options,
+        headers,
+    });
+    
+    if (!response.ok) {
+        let errorMsg = `Request failed: ${response.status}`;
+        try {
+            const data = await response.json();
+            errorMsg = data.error || errorMsg;
+        } catch (e) {
+            // Response wasn't JSON
         }
-
-        const headers = { 'Authorization': `Bearer ${token}` };
-        console.log("[API] Starting background data sync...");
-
-        // Fetch All Protected Data
-        const [configData, blogData, locData, certData, usersData, pickupsData, redemptionsData, messagesData] = await Promise.all([
-             safeFetch('/config', { headers }),
-             safeFetch('/blog', { headers }),
-             safeFetch('/locations', { headers }),
-             safeFetch('/certificates', { headers }),
-             safeFetch('/users', { headers }),
-             safeFetch('/pickups', { headers }),
-             safeFetch('/redemption', { headers }),
-             safeFetch('/messages', { headers })
-        ]);
-
-        if (configData) {
-             setSysConfig(configData.sysConfig);
-             setWasteRates(configData.wasteRates);
-        }
-        setBlogPosts(blogData || []);
-        setDropOffLocations(locData || []);
-        setCertificates(certData || []);
-        // IMPORTANT: Avoid overwriting users if we have a fresher optimistically added user
-        setUsers(usersData || []); 
-        setPickups(pickupsData || []);
-        setRedemptionRequests(redemptionsData || []);
-        setMessages(messagesData || []);
-        
-        console.log("[API] Data sync complete.");
-
-    } catch (error: any) {
-        console.error("Failed to load data", error);
-        // Don't set global error message on background sync failure to avoid disrupting user experience
-        if (loading) setErrorMsg(error.message); 
-    } finally {
-        setLoading(false);
+        throw new Error(errorMsg);
     }
-  };
-
-  // Initial Data Fetch
-  useEffect(() => {
-    fetchAllData();
-  }, []);
-
-  const login = async (email: string, password: string): Promise<{ user: User; token: string }> => {
-      console.log("[Auth] Attempting login...");
-      const data = await safeFetch('/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({ email, password })
-      });
-      
-      console.log("[Auth] Login success, token received.");
-      localStorage.setItem('zilcycler_token', data.token);
-
-      // OPTIMIZATION: Inject the logged-in user immediately into state
-      // This allows the app to proceed to Dashboard WITHOUT waiting for fetchAllData to finish
-      if (data.user) {
-          console.log("[Auth] Setting optimistic user state");
-          setUsers(prev => {
-              const others = prev.filter(u => u.id !== data.user.id);
-              return [data.user, ...others];
-          });
-      }
-
-      // Trigger background fetch, but don't let it block the return
-      // We catch errors here so the user isn't stuck if background sync fails
-      fetchAllData().catch(err => console.warn("[Auth] Background sync warning:", err));
-      
-      return data;
-  };
-
-  const verifySession = async (token: string): Promise<{ userId: string; valid: boolean }> => {
-      return await safeFetch('/auth/verify', {
-          method: 'GET',
-          headers: {
-              'Authorization': `Bearer ${token}`
-          }
-      });
-  };
-
-  const requestPasswordReset = async (email: string): Promise<void> => {
-      await safeFetch('/auth/forgot-password', {
-          method: 'POST',
-          body: JSON.stringify({ email })
-      });
-  };
-
-  const resetPassword = async (email: string, otp: string, newPassword: string): Promise<void> => {
-      await safeFetch('/auth/reset-password', {
-          method: 'POST',
-          body: JSON.stringify({ email, otp, newPassword })
-      });
-  };
-
-  const initiateChangePassword = async (userId: string, currentPassword: string): Promise<void> => {
-      await safeFetch('/auth/change-password/initiate', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify({ userId, currentPassword })
-      });
-  };
-
-  const confirmChangePassword = async (userId: string, otp: string, newPassword: string): Promise<void> => {
-      await safeFetch('/auth/change-password/confirm', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify({ userId, otp, newPassword })
-      });
-  };
-
-  const schedulePickup = async (task: PickupTask) => {
-    try {
-        const data = await safeFetch('/pickups', {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify(task)
-        });
-        if (data.id) {
-            const newTask = { ...task, id: data.id };
-            setPickups((prev) => [newTask, ...prev]);
-        }
-    } catch (e) {
-        console.error("Failed to schedule pickup", e);
-    }
-  };
-
-  const updatePickup = async (id: string, updates: Partial<PickupTask>) => {
-    setPickups((prev) => 
-      prev.map((p) => (p && p.id === id) ? { ...p, ...updates } : p)
-    );
-    if (updates.earnedZoints && updates.status === 'Completed') {
-        const task = pickups.find(p => p.id === id);
-        if (task) {
-            setUsers(prev => prev.map(u => u.id === task.userId ? { ...u, zointsBalance: u.zointsBalance + (updates.earnedZoints || 0) } : u));
-        }
-    }
-
-    await safeFetch('/pickups', {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ id, updates })
-    });
-  };
-
-  const updateWasteRates = async (newRates: WasteRates) => {
-    setWasteRates(newRates);
-    await safeFetch('/rates/update', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ rates: newRates })
-    });
-  };
-
-  const updateSysConfig = async (config: SystemConfig) => {
-    setSysConfig(config);
-    await safeFetch('/config/update', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(config)
-    });
-  };
-
-  const updateUser = async (id: string, updates: Partial<User>) => {
-    setUsers((prev) => prev.map(u => (u && u.id === id) ? { ...u, ...updates } : u));
-    await safeFetch('/users', {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ id, updates })
-    });
-  };
-
-  const addUser = async (user: User, password?: string) => {
-    const data = await safeFetch('/users', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ ...user, password })
-    });
-
-    const newUser = { ...user, id: data.userId };
-    setUsers((prev) => [newUser, ...prev]);
-  };
-
-  const sendSignupVerification = async (email: string) => {
-      await safeFetch('/auth/send-verification', {
-          method: 'POST',
-          body: JSON.stringify({ email })
-      });
-  };
-
-  const registerUser = async (user: User, password: string, otp: string) => {
-      const data = await safeFetch('/auth/register', {
-          method: 'POST',
-          body: JSON.stringify({ user, password, otp })
-      });
-
-      const newUser = { ...user, id: data.userId };
-      setUsers((prev) => [newUser, ...prev]);
-  };
-
-  const createRedemptionRequest = async (req: RedemptionRequest) => {
-    const data = await safeFetch('/redemption', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(req)
-    });
-    if(data.id) {
-        const newReq = { ...req, id: data.id };
-        setRedemptionRequests((prev) => [newReq, ...prev]);
-        setUsers((prevUsers) => prevUsers.map(u => 
-            (u && u.id === req.userId)
-            ? { ...u, zointsBalance: u.zointsBalance - req.amount } 
-            : u
-        ));
-    }
-  };
-
-  const updateRedemptionStatus = async (id: string, status: 'Approved' | 'Rejected') => {
-    setRedemptionRequests((prev) => prev.map(r => (r && r.id === id) ? { ...r, status } : r));
-    if (status === 'Rejected') {
-        const req = redemptionRequests.find(r => r && r.id === id);
-        if (req) {
-            setUsers((prevUsers) => prevUsers.map(u => 
-                (u && u.id === req.userId)
-                ? { ...u, zointsBalance: u.zointsBalance + req.amount } 
-                : u
-            ));
-        }
-    }
-    await safeFetch('/redemption', {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ id, status })
-    });
-  };
-
-  const addBlogPost = async (post: BlogPost) => {
-    const data = await safeFetch('/blog', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(post)
-    });
-    if(data.id) {
-        setBlogPosts(prev => [{...post, id: data.id}, ...prev]);
-    }
-  };
-
-  const deleteBlogPost = async (id: string) => {
-    setBlogPosts(prev => prev.filter(p => p.id !== id));
-    await safeFetch('/blog', {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ id })
-    });
-  };
-
-  const sendMessage = async (msg: Message) => {
-      const data = await safeFetch('/messages', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify(msg)
-      });
-      if(data.id) {
-          setMessages(prev => [...prev, { ...msg, id: data.id }]);
-      }
-  };
-
-  const addCertificate = async (cert: Certificate) => {
-      const data = await safeFetch('/certificates', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify(cert)
-      });
-      if(data.id) {
-          setCertificates(prev => [{...cert, id: data.id}, ...prev]);
-      }
-  };
-
-  const getPickupsByRole = (role: UserRole, userId?: string) => {
-    switch (role) {
-      case UserRole.HOUSEHOLD:
-      case UserRole.ORGANIZATION:
-        return pickups.filter(p => p && p.userId === userId);
-      case UserRole.COLLECTOR:
-        return pickups.filter(p => p && (p.status === 'Pending' || p.status === 'Assigned' || p.status === 'Missed' || p.status === 'Completed'));
-      case UserRole.STAFF:
-      case UserRole.ADMIN:
-        return pickups;
-      default:
-        return [];
-    }
-  };
-
-  if (loading) {
-      return (
-        <div className="h-screen w-full flex flex-col items-center justify-center text-green-800 bg-gray-50 dark:bg-gray-900">
-           <div className="w-8 h-8 border-4 border-green-200 border-t-green-700 rounded-full animate-spin mb-4"></div>
-           <span className="font-bold dark:text-gray-200">Connecting to Zilcycler Cloud...</span>
-           {errorMsg && (
-             <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 rounded-xl text-center max-w-sm border border-red-100 dark:border-red-800">
-               <p className="font-bold mb-1">Connection Error</p>
-               <p className="text-xs">{errorMsg}</p>
-               <p className="text-xs mt-2 text-gray-500 dark:text-gray-400">Ensure the backend is running and reachable.</p>
-             </div>
-           )}
-        </div>
-      );
-  }
-
-  return (
-    <AppContext.Provider value={{ loading, pickups, wasteRates, sysConfig, users, redemptionRequests, blogPosts, dropOffLocations, messages, certificates, sendMessage, schedulePickup, updatePickup, getPickupsByRole, updateWasteRates, updateSysConfig, updateUser, addUser, registerUser, sendSignupVerification, login, verifySession, requestPasswordReset, resetPassword, initiateChangePassword, confirmChangePassword, createRedemptionRequest, updateRedemptionStatus, addBlogPost, deleteBlogPost, addCertificate, refreshData: fetchAllData }}>
-      {children}
-    </AppContext.Provider>
-  );
+    
+    // Handle 204 No Content
+    if (response.status === 204) return null;
+    
+    return response.json();
 };
 
-export const useApp = () => {
-  const context = useContext(AppContext);
-  if (context === undefined) {
-    throw new Error('useApp must be used within an AppProvider');
-  }
-  return context;
+// ============================================================
+// PROVIDER
+// ============================================================
+
+export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const [users, setUsers] = useState<User[]>([]);
+    const [pickups, setPickups] = useState<PickupTask[]>([]);
+    const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
+    const [dropOffLocations, setDropOffLocations] = useState<DropOffLocation[]>([]);
+    const [redemptionRequests, setRedemptionRequests] = useState<RedemptionRequest[]>([]);
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [certificates, setCertificates] = useState<Certificate[]>([]);
+    const [sysConfig, setSysConfig] = useState<SystemConfig>({ maintenanceMode: false, allowRegistrations: true });
+    const [wasteRates, setWasteRates] = useState<WasteRates>({});
+    const [loading, setLoading] = useState(true);
+
+    // ============================================================
+    // DATA FETCHERS
+    // ============================================================
+
+    const fetchConfig = useCallback(async () => {
+        try {
+            const data = await apiCall('config');
+            if (data.sysConfig) setSysConfig(data.sysConfig);
+            if (data.wasteRates) setWasteRates(data.wasteRates);
+        } catch (e) {
+            console.error('Failed to fetch config', e);
+        }
+    }, []);
+
+    const fetchUsers = useCallback(async () => {
+        try {
+            const data = await apiCall('users');
+            setUsers(data || []);
+        } catch (e) {
+            console.error('Failed to fetch users', e);
+        }
+    }, []);
+
+    const fetchPickups = useCallback(async () => {
+        try {
+            const data = await apiCall('pickups');
+            setPickups(data || []);
+        } catch (e) {
+            console.error('Failed to fetch pickups', e);
+        }
+    }, []);
+
+    const fetchBlog = useCallback(async () => {
+        try {
+            const data = await apiCall('blog');
+            setBlogPosts(data || []);
+        } catch (e) {
+            console.error('Failed to fetch blog', e);
+        }
+    }, []);
+
+    const fetchLocations = useCallback(async () => {
+        try {
+            const data = await apiCall('locations');
+            setDropOffLocations(data || []);
+        } catch (e) {
+            console.error('Failed to fetch locations', e);
+        }
+    }, []);
+
+    const fetchRedemption = useCallback(async () => {
+        try {
+            const data = await apiCall('redemption');
+            setRedemptionRequests(data || []);
+        } catch (e) {
+            console.error('Failed to fetch redemption', e);
+        }
+    }, []);
+
+    const fetchMessages = useCallback(async () => {
+        try {
+            const data = await apiCall('messages');
+            setMessages(data || []);
+        } catch (e) {
+            console.error('Failed to fetch messages', e);
+        }
+    }, []);
+
+    const fetchCertificates = useCallback(async () => {
+        try {
+            const data = await apiCall('certificates');
+            setCertificates(data || []);
+        } catch (e) {
+            console.error('Failed to fetch certificates', e);
+        }
+    }, []);
+
+    const refreshAll = useCallback(async () => {
+        await Promise.all([
+            fetchUsers(),
+            fetchPickups(),
+            fetchRedemption(),
+            fetchMessages(),
+            fetchCertificates(),
+        ]);
+    }, [fetchUsers, fetchPickups, fetchRedemption, fetchMessages, fetchCertificates]);
+
+    // Initial load - public endpoints only
+    useEffect(() => {
+        const init = async () => {
+            await Promise.all([
+                fetchConfig(),
+                fetchBlog(),
+                fetchLocations(),
+            ]);
+            
+            // Try authenticated endpoints if token exists
+            const token = await getToken();
+            if (token) {
+                await refreshAll();
+            }
+            
+            setLoading(false);
+        };
+        init();
+    }, [fetchConfig, fetchBlog, fetchLocations, refreshAll]);
+
+    // ============================================================
+    // AUTH METHODS
+    // ============================================================
+
+    const login = async (email: string, password: string) => {
+        const data = await apiCall('auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email, password }),
+        });
+        // Token is set by App.tsx via setToken; here we just refresh data
+        // We need to wait briefly for storage to commit before fetching
+        setTimeout(async () => {
+            await refreshAll();
+        }, 100);
+        return { user: data.user, token: data.token };
+    };
+
+    const verifySession = async (token: string) => {
+        const response = await fetch(`${API_BASE_URL}/auth/verify`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Invalid session');
+        const data = await response.json();
+        await refreshAll();
+        return data;
+    };
+
+    const requestPasswordReset = async (email: string) => {
+        await apiCall('auth/forgot-password', {
+            method: 'POST',
+            body: JSON.stringify({ email }),
+        });
+    };
+
+    const resetPassword = async (email: string, otp: string, newPassword: string) => {
+        await apiCall('auth/reset-password', {
+            method: 'POST',
+            body: JSON.stringify({ email, otp, newPassword }),
+        });
+    };
+
+    const sendSignupVerification = async (email: string) => {
+        await apiCall('auth/send-verification', {
+            method: 'POST',
+            body: JSON.stringify({ email }),
+        });
+    };
+
+    const registerUser = async (user: User, password: string, otp: string) => {
+        await apiCall('auth/register', {
+            method: 'POST',
+            body: JSON.stringify({ user, password, otp }),
+        });
+    };
+
+    const initiateChangePassword = async (userId: string, currentPassword: string) => {
+        await apiCall('auth/change-password/initiate', {
+            method: 'POST',
+            body: JSON.stringify({ userId, currentPassword }),
+        });
+    };
+
+    const confirmChangePassword = async (userId: string, otp: string, newPassword: string) => {
+        await apiCall('auth/change-password/confirm', {
+            method: 'POST',
+            body: JSON.stringify({ userId, otp, newPassword }),
+        });
+    };
+
+    // ============================================================
+    // USER METHODS
+    // ============================================================
+
+    const addUser = async (user: User, password: string) => {
+        await apiCall('users', {
+            method: 'POST',
+            body: JSON.stringify({ ...user, password }),
+        });
+        await fetchUsers();
+    };
+
+    const updateUser = async (id: string, updates: Partial<User>) => {
+        await apiCall('users', {
+            method: 'PUT',
+            body: JSON.stringify({ id, updates }),
+        });
+        await fetchUsers();
+    };
+
+    // ============================================================
+    // PICKUP METHODS
+    // ============================================================
+
+    const schedulePickup = async (pickup: PickupTask) => {
+        await apiCall('pickups', {
+            method: 'POST',
+            body: JSON.stringify(pickup),
+        });
+        await fetchPickups();
+    };
+
+    const updatePickup = async (id: string, updates: Partial<PickupTask>) => {
+        await apiCall('pickups', {
+            method: 'PUT',
+            body: JSON.stringify({ id, updates }),
+        });
+        // Refresh pickups AND users (because zoints balance changes)
+        await Promise.all([fetchPickups(), fetchUsers()]);
+    };
+
+    const getPickupsByRole = useCallback((role: UserRole, userId?: string): PickupTask[] => {
+        if (role === UserRole.ADMIN || role === UserRole.STAFF) {
+            return pickups;
+        }
+        if (role === UserRole.COLLECTOR) {
+            return pickups;
+        }
+        if (userId) {
+            return pickups.filter(p => p.userId === userId);
+        }
+        return [];
+    }, [pickups]);
+
+    // ============================================================
+    // REDEMPTION METHODS
+    // ============================================================
+
+    const createRedemptionRequest = async (req: RedemptionRequest) => {
+        await apiCall('redemption', {
+            method: 'POST',
+            body: JSON.stringify(req),
+        });
+        await Promise.all([fetchRedemption(), fetchUsers()]);
+    };
+
+    const updateRedemptionStatus = async (id: string, status: 'Approved' | 'Rejected') => {
+        await apiCall('redemption', {
+            method: 'PUT',
+            body: JSON.stringify({ id, status }),
+        });
+        await Promise.all([fetchRedemption(), fetchUsers()]);
+    };
+
+    // ============================================================
+    // MESSAGE METHODS
+    // ============================================================
+
+    const sendMessage = async (msg: Message) => {
+        await apiCall('messages', {
+            method: 'POST',
+            body: JSON.stringify(msg),
+        });
+        await fetchMessages();
+    };
+
+    // ============================================================
+    // CONFIG METHODS
+    // ============================================================
+
+    const updateSysConfig = async (config: SystemConfig) => {
+        await apiCall('config/update', {
+            method: 'POST',
+            body: JSON.stringify(config),
+        });
+        setSysConfig(config);
+    };
+
+    const updateWasteRates = async (rates: WasteRates) => {
+        await apiCall('rates/update', {
+            method: 'POST',
+            body: JSON.stringify({ rates }),
+        });
+        setWasteRates(rates);
+    };
+
+    // ============================================================
+    // BLOG METHODS
+    // ============================================================
+
+    const addBlogPost = async (post: BlogPost) => {
+        await apiCall('blog', {
+            method: 'POST',
+            body: JSON.stringify(post),
+        });
+        await fetchBlog();
+    };
+
+    const deleteBlogPost = async (id: string) => {
+        await apiCall('blog', {
+            method: 'DELETE',
+            body: JSON.stringify({ id }),
+        });
+        await fetchBlog();
+    };
+
+    // ============================================================
+    // CERTIFICATE METHODS
+    // ============================================================
+
+    const addCertificate = async (cert: Certificate) => {
+        await apiCall('certificates', {
+            method: 'POST',
+            body: JSON.stringify(cert),
+        });
+        await fetchCertificates();
+    };
+
+    // ============================================================
+    // CONTEXT VALUE
+    // ============================================================
+
+    const value: AppContextType = {
+        users,
+        pickups,
+        blogPosts,
+        dropOffLocations,
+        redemptionRequests,
+        messages,
+        certificates,
+        sysConfig,
+        wasteRates,
+        loading,
+        login,
+        verifySession,
+        requestPasswordReset,
+        resetPassword,
+        sendSignupVerification,
+        registerUser,
+        initiateChangePassword,
+        confirmChangePassword,
+        addUser,
+        updateUser,
+        schedulePickup,
+        updatePickup,
+        getPickupsByRole,
+        createRedemptionRequest,
+        updateRedemptionStatus,
+        sendMessage,
+        updateSysConfig,
+        updateWasteRates,
+        addBlogPost,
+        deleteBlogPost,
+        addCertificate,
+    };
+
+    return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+};
+
+// ============================================================
+// HOOK
+// ============================================================
+
+export const useApp = (): AppContextType => {
+    const context = useContext(AppContext);
+    if (!context) {
+        throw new Error('useApp must be used within an AppProvider');
+    }
+    return context;
 };

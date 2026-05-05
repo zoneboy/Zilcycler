@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
 import { useApp } from '../context/AppContext';
-import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, AlertCircle, ArrowLeft, Save, Lock, Eye, EyeOff, Check, Globe, Trash2, AlertTriangle, Landmark, Camera, KeyRound, Loader2, Phone, Mail, Headphones, Share2 } from 'lucide-react';
+import { getToken } from '../utils/storage';
+import { API_BASE_URL } from '../constants';
+import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, ArrowLeft, Save, Lock, Eye, EyeOff, Globe, Trash2, AlertTriangle, Landmark, Camera, KeyRound, Loader2, Phone, Mail, Headphones, Share2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -12,7 +14,7 @@ type SettingsView = 'MAIN' | 'ACCOUNT' | 'PRIVACY' | 'SUPPORT';
 
 const validateImage = (file: File) => {
   const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-  const maxSize = 5 * 1024 * 1024; // 5MB
+  const maxSize = 5 * 1024 * 1024;
 
   if (!allowedTypes.includes(file.type)) {
     throw new Error('Invalid file type. Only JPEG, PNG, and WebP are allowed.');
@@ -29,7 +31,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
   const [notifications, setNotifications] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Initialize dark mode from localStorage or system preference
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
         const saved = localStorage.getItem('darkMode');
@@ -41,7 +42,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     return false;
   });
   
-  // Account State
   const [formData, setFormData] = useState({
     name: user.name,
     email: user.email || '',
@@ -56,7 +56,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
-  // Privacy State
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState('');
@@ -65,7 +64,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
   const [publicProfile, setPublicProfile] = useState(false);
   const [dataSharing, setDataSharing] = useState(true);
 
-  // Effect to apply dark mode class
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
@@ -77,15 +75,13 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
 
   const uploadToCloudinary = async (file: File): Promise<string | null> => {
       try {
-          // 1. Get Authentication Token
-          const token = localStorage.getItem('zilcycler_token');
+          const token = await getToken();
           if (!token) {
               alert("You must be logged in to upload images.");
               return null;
           }
 
-          // 2. Request Signature from Backend
-          const signRes = await fetch('/api/auth/sign-upload', {
+          const signRes = await fetch(`${API_BASE_URL}/auth/sign-upload`, {
               method: 'POST',
               headers: {
                   'Content-Type': 'application/json',
@@ -100,7 +96,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
 
           const { signature, timestamp, apiKey, cloudName, folder } = await signRes.json();
 
-          // 3. Prepare Form Data for Cloudinary
           const formData = new FormData();
           formData.append('file', file);
           formData.append('api_key', apiKey);
@@ -108,7 +103,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
           formData.append('signature', signature);
           formData.append('folder', folder);
 
-          // 4. Upload to Cloudinary
           const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
               method: 'POST',
               body: formData
@@ -135,7 +129,7 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
         validateImage(file);
       } catch (err: any) {
         alert(err.message);
-        e.target.value = ''; // Reset input
+        e.target.value = '';
         return;
       }
 
@@ -189,7 +183,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     }
   };
 
-  // Step 1: Initiate Password Change
   const handleInitiatePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -198,8 +191,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
         return;
     }
 
-    // Password Strength Validation
-    // At least 8 characters, 1 letter, 1 number, 1 special char
     const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*()_+{}\[\]:;<>,.?~\\-]).{8,}$/;
     if (!passwordRegex.test(passwords.new)) {
         alert("Password must be at least 8 characters long and contain a mix of letters, numbers, and symbols.");
@@ -210,7 +201,7 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     try {
         await initiateChangePassword(user.id, passwords.current);
         alert("Verification code sent to your email.");
-        setIsVerifyingOtp(true); // Switch to OTP mode
+        setIsVerifyingOtp(true);
         setIsSaving(false);
     } catch (error: any) {
         alert(error.message || "Failed to initiate password change. Check your current password.");
@@ -218,7 +209,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
     }
   };
 
-  // Step 2: Confirm Password Change
   const handleConfirmPasswordChange = async () => {
       if (otp.length < 6) {
           alert("Please enter a valid 6-digit code.");
@@ -229,7 +219,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
           await confirmChangePassword(user.id, otp, passwords.new);
           alert("Password changed successfully!");
           
-          // Reset Form
           setPasswords({ current: '', new: '', confirm: '' });
           setOtp('');
           setIsVerifyingOtp(false);
@@ -243,7 +232,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
 
   const renderMain = () => (
     <div className="space-y-6 animate-fade-in">
-      {/* Profile Card */}
       <div className="flex items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
         {user.avatar ? (
             <img src={user.avatar} alt="Profile" className="w-16 h-16 rounded-full border-2 border-green-100 dark:border-green-900 object-cover" />
@@ -258,7 +246,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
         </div>
       </div>
 
-      {/* Preferences Group */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden transition-colors">
         <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50">
           <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm uppercase tracking-wide">App Preferences</h3>
@@ -295,7 +282,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
         </div>
       </div>
 
-      {/* Account Group */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden transition-colors">
          <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50">
           <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm uppercase tracking-wide">Account Settings</h3>
@@ -333,7 +319,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
          </button>
       </div>
 
-       {/* Share App Button */}
        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden transition-colors">
          <button 
             onClick={handleShareApp}
@@ -352,7 +337,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
          </button>
       </div>
 
-      {/* Help & Support Group */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden transition-colors">
          <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50">
           <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm uppercase tracking-wide">Help & Support</h3>
@@ -395,7 +379,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
         </div>
 
         <form onSubmit={handleSaveAccount} className="space-y-4">
-             {/* Avatar Section */}
              <div className="flex flex-col items-center mb-6">
                  <div className="relative group cursor-pointer" onClick={() => !isUploadingAvatar && fileInputRef.current?.click()}>
                     {isUploadingAvatar ? (
@@ -452,7 +435,8 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
                  <div>
                     <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Phone Number</label>
                     <input 
-                        type="tel" 
+                        type="tel"
+                        inputMode="tel"
                         value={formData.phone}
                         onChange={(e) => setFormData({...formData, phone: e.target.value})}
                         className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-green-500 dark:text-white transition-colors font-medium"
@@ -485,7 +469,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
                     />
                 </div>
 
-                {/* Bank Details Section */}
                 <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
                     <h4 className="text-sm font-bold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
                         <Landmark className="w-4 h-4 text-green-600 dark:text-green-500" /> Bank Details
@@ -505,7 +488,8 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Account Number</label>
                                 <input 
-                                    type="text" 
+                                    type="text"
+                                    inputMode="numeric"
                                     value={formData.accountNumber}
                                     onChange={(e) => setFormData({...formData, accountNumber: e.target.value})}
                                     placeholder="0123456789"
@@ -551,13 +535,11 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">Privacy & Security</h2>
         </div>
 
-        {/* Change Password */}
         <form onSubmit={handleInitiatePasswordChange} className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4 transition-colors">
             <h3 className="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
                 <Lock className="w-4 h-4 text-green-600" /> Change Password
             </h3>
             
-            {/* If verifying OTP, show OTP input instead of password fields */}
             {isVerifyingOtp ? (
                 <div className="space-y-3 animate-fade-in">
                     <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300 text-sm rounded-xl border border-green-100 dark:border-green-900/50 mb-2">
@@ -566,7 +548,8 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
                     <div>
                         <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Enter Verification Code</label>
                         <input 
-                            type="text" 
+                            type="text"
+                            inputMode="numeric"
                             value={otp}
                             onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                             className="w-full p-3 mt-1 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-green-500 dark:text-white text-center text-lg font-bold tracking-widest transition-colors"
@@ -643,7 +626,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
             )}
         </form>
 
-        {/* Privacy Toggles */}
         <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden transition-colors">
              <h3 className="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2 mb-4">
                 <Globe className="w-4 h-4 text-green-600" /> Privacy Settings
@@ -676,7 +658,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
             </div>
         </div>
 
-        {/* Danger Zone */}
         <div className="p-5 rounded-2xl border border-red-100 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 transition-colors">
              <h3 className="font-bold text-red-800 dark:text-red-400 flex items-center gap-2 mb-2">
                 <AlertTriangle className="w-4 h-4" /> Danger Zone

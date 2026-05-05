@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Screen } from './types';
 import { AppProvider, useApp } from './context/AppContext';
+import { getToken, setToken, removeToken } from './utils/storage';
 import Auth from './components/Auth';
 import DashboardHousehold from './components/DashboardHousehold';
 import DashboardCollector from './components/DashboardCollector';
@@ -15,7 +16,7 @@ import MessagesWithUser from './components/Messages';
 import WalletScreen from './components/WalletScreen';
 import PickupHistory from './components/PickupHistory';
 import Certificates from './components/Certificates';
-import { Home, FileText, Settings as SettingsIcon, LogOut, ArrowLeft, Building2, Wallet } from 'lucide-react';
+import { Home, FileText, Settings as SettingsIcon, LogOut, ArrowLeft, Wallet } from 'lucide-react';
 
 // Helper function to check token expiry (Basic JWT check)
 const isTokenExpired = (token: string): boolean => {
@@ -30,33 +31,39 @@ const isTokenExpired = (token: string): boolean => {
 const MainApp: React.FC = () => {
   const { users, loading, verifySession } = useApp();
   
-  // Initialize state from localStorage (Token based) with validation
-  const [sessionToken, setSessionToken] = useState<string | null>(() => {
-      const token = localStorage.getItem('zilcycler_token');
-      if (token && isTokenExpired(token)) {
-          localStorage.removeItem('zilcycler_token');
-          return null;
-      }
-      return token;
-  });
-
+  // Token state - now loaded asynchronously from storage
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   
   // Set initial screen
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.AUTH);
   
-  // Track if we are actively verifying a token to show a spinner instead of the login screen
-  const [isVerifying, setIsVerifying] = useState(!!sessionToken);
+  // Track if we are still loading the token from storage on app startup
+  const [isVerifying, setIsVerifying] = useState(true);
 
-  const handleLogin = (userId: string, token: string) => {
-    localStorage.setItem('zilcycler_token', token);
+  // STAGE 2A: Async token retrieval on app startup
+  useEffect(() => {
+    const loadToken = async () => {
+      const token = await getToken();
+      if (token && !isTokenExpired(token)) {
+        setSessionToken(token);
+      } else if (token) {
+        // Token exists but expired - clean it up
+        await removeToken();
+      }
+    };
+    loadToken();
+  }, []);
+
+  const handleLogin = async (userId: string, token: string) => {
+    await setToken(token);
     setSessionToken(token);
     setSessionUserId(userId);
     setCurrentScreen(Screen.DASHBOARD);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('zilcycler_token');
+  const handleLogout = async () => {
+    await removeToken();
     setSessionToken(null);
     setSessionUserId(null);
     setCurrentScreen(Screen.AUTH);
@@ -71,14 +78,12 @@ const MainApp: React.FC = () => {
           }
           
           try {
-              // Verify the token with the backend
               const { userId } = await verifySession(sessionToken);
               setSessionUserId(userId);
               setCurrentScreen(Screen.DASHBOARD);
           } catch (e) {
               console.error("Invalid session", e);
-              // Invalid token, clear it
-              handleLogout();
+              await handleLogout();
           } finally {
               setIsVerifying(false);
           }
@@ -87,7 +92,7 @@ const MainApp: React.FC = () => {
       if (!loading) {
           restoreSession();
       }
-  }, [loading, sessionToken]); // Dependency on sessionToken ensures re-run if it changes
+  }, [loading, sessionToken]);
 
   // Loading state (Global Data Loading OR Session Verification)
   if (loading || isVerifying) {
@@ -103,10 +108,8 @@ const MainApp: React.FC = () => {
   const currentUser = users.find(u => u && u.id === sessionUserId) || null;
 
   const renderScreen = () => {
-    // Fallback if context user not found
     const effectiveUser = currentUser;
 
-    // If still at Dashboard screen but no user found (and not loading), redirect to auth or show error
     if (!effectiveUser && currentScreen !== Screen.AUTH) {
         return <Auth onLogin={handleLogin} />;
     }
@@ -146,7 +149,7 @@ const MainApp: React.FC = () => {
       case Screen.CERTIFICATES:
         return <Certificates user={effectiveUser} onBack={() => setCurrentScreen(Screen.DASHBOARD)} />;
       default:
-        return <DashboardHousehold user={effectiveUser} onNavigate={setCurrentScreen} />; // Fallback
+        return <DashboardHousehold user={effectiveUser} onNavigate={setCurrentScreen} />;
     }
   };
 
@@ -154,15 +157,12 @@ const MainApp: React.FC = () => {
     return <Auth onLogin={handleLogin} />;
   }
   
-  // Need a valid user object for layout
   if (!currentUser) return <Auth onLogin={handleLogin} />;
 
-  // Common Layout for logged-in users
   return (
     <div className="bg-gray-50 dark:bg-gray-900 min-h-screen flex justify-center font-sans text-gray-900 dark:text-gray-100 transition-colors duration-300">
       <div className="w-full max-w-md bg-white dark:bg-gray-900 min-h-screen shadow-2xl relative flex flex-col transition-colors duration-300">
         
-        {/* Top Navigation / Header area for non-dashboard screens */}
         {currentScreen !== Screen.DASHBOARD && (
              <div className="p-4 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 sticky top-0 z-20 transition-colors duration-300">
                  <button onClick={() => setCurrentScreen(Screen.DASHBOARD)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
@@ -172,12 +172,10 @@ const MainApp: React.FC = () => {
              </div>
         )}
 
-        {/* Main Content Area */}
         <main className="flex-1 p-6 overflow-y-auto scroll-smooth">
           {renderScreen()}
         </main>
 
-        {/* Bottom Navigation (Household & Organization) */}
         {(currentUser.role === UserRole.HOUSEHOLD || currentUser.role === UserRole.ORGANIZATION) && (
           <nav className="sticky bottom-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 py-3 px-6 flex justify-between items-center z-30 pb-safe transition-colors duration-300">
             <button 
