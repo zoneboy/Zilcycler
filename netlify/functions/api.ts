@@ -29,34 +29,57 @@ import {
   CreateCertificateSchema,
 } from './validators';
 
-// --- CORS CONFIGURATION ---
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS"
+// ============================================================
+// CORS CONFIGURATION (Stage 1B - tightened)
+// ============================================================
+const ALLOWED_ORIGINS = [
+  'https://zilcycler.netlify.app',
+  'http://localhost:5173',  // Vite dev
+  'http://localhost:8888',  // Netlify dev
+  'capacitor://localhost',  // Capacitor Android
+  'https://localhost',       // Capacitor Android (alt scheme)
+];
+
+const getCorsHeaders = (origin: string | undefined) => {
+  const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) 
+    ? origin 
+    : ALLOWED_ORIGINS[0]; // Default to production domain
+  
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Vary": "Origin",
+  };
 };
 
 // Helper for standard response
-const response = (statusCode: number, body: any) => ({
+const response = (statusCode: number, body: any, origin?: string) => ({
   statusCode,
   headers: { 
     "Content-Type": "application/json",
-    ...CORS_HEADERS
+    ...getCorsHeaders(origin)
   },
   body: JSON.stringify(body)
 });
 
-// Production-safe error response (don't leak err.message in prod)
-const errorResponse = (statusCode: number, publicMessage: string, internalError?: any) => {
+// Production-safe error response
+const errorResponse = (statusCode: number, publicMessage: string, internalError?: any, origin?: string) => {
   if (internalError) {
     console.error(`[API ERROR ${statusCode}]`, internalError);
   }
-  return response(statusCode, { error: publicMessage });
+  return response(statusCode, { error: publicMessage }, origin);
 };
 
+// ============================================================
+// SECRET STRENGTH VALIDATION (Stage 1B)
+// ============================================================
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error('CRITICAL: JWT_SECRET must be set in environment variables');
+}
+if (JWT_SECRET.length < 32) {
+  throw new Error('CRITICAL: JWT_SECRET must be at least 32 characters. Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
 }
 
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
@@ -64,6 +87,11 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 // --- ENCRYPTION UTILS ---
 const ENCRYPTION_SECRET = process.env.ENCRYPTION_KEY || JWT_SECRET;
 const ENCRYPTION_SALT = process.env.ENCRYPTION_SALT;
+
+// SECURITY: Warn loudly if ENCRYPTION_KEY falls back to JWT_SECRET
+if (!process.env.ENCRYPTION_KEY) {
+  console.warn('SECURITY WARNING: ENCRYPTION_KEY not set, falling back to JWT_SECRET. Set a separate ENCRYPTION_KEY in production.');
+}
 
 if (!ENCRYPTION_SALT && IS_PRODUCTION) {
     throw new Error('CRITICAL: ENCRYPTION_SALT required in production');
@@ -93,18 +121,14 @@ const encrypt = (text: string): string => {
 const decrypt = (text: string): string => {
     if (!text) return text;
     
-    // Check if it looks like our encrypted JSON format
     if (!text.startsWith('{')) {
-        // Legacy plaintext - return as-is during migration window
-        // TODO: After migration period, log these and migrate
-        return text;
+        return text; // Legacy plaintext
     }
     
     try {
         const parsed = JSON.parse(text);
         const { iv, content, tag } = parsed;
         if (!iv || !content || !tag) {
-            // Malformed but JSON - treat as legacy
             return text;
         }
 
@@ -114,7 +138,6 @@ const decrypt = (text: string): string => {
         decrypted += decipher.final('utf8');
         return decrypted;
     } catch (e) {
-        // Decryption failed - log but return empty to prevent leaking corrupted data
         console.error("Decryption error - data may be corrupted or key changed", e);
         return '';
     }
@@ -129,12 +152,45 @@ const safeCompare = (a: string, b: string): boolean => {
     return timingSafeEqual(bufA, bufB);
 };
 
+// ============================================================
+// AUDIT LOG HELPER (Stage 1B)
+// ============================================================
+const auditLog = async (params: {
+    actorId: string | null;
+    actorRole: string | null;
+    action: string;
+    targetType?: string;
+    targetId?: string;
+    metadata?: any;
+    ipAddress?: string;
+}) => {
+    try {
+        await query(
+            `INSERT INTO audit_log (actor_id, actor_role, action, target_type, target_id, metadata, ip_address)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+                params.actorId,
+                params.actorRole,
+                params.action,
+                params.targetType || null,
+                params.targetId || null,
+                params.metadata ? JSON.stringify(params.metadata) : null,
+                params.ipAddress || null,
+            ]
+        );
+    } catch (e) {
+        // Audit failures should never break the main flow, but should be logged
+        console.error('AUDIT LOG FAILURE:', e);
+    }
+};
+
 // --- AUTH MIDDLEWARE ---
 interface AuthUser {
     userId: string;
     role: string;
     email: string;
     iat: number;
+    tv?: number; // token version
 }
 
 const getAuth = async (headers: any): Promise<AuthUser | null> => {
@@ -146,23 +202,34 @@ const getAuth = async (headers: any): Promise<AuthUser | null> => {
     try {
         const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
         
-        // SECURITY: Check if password was changed after token was issued
-        // If so, invalidate the token (forces re-login on all devices)
-        const pwCheck = await query(
-            'SELECT password_changed_at FROM users WHERE id = $1',
+        // SECURITY: Check password_changed_at and token_version
+        const userCheck = await query(
+            'SELECT password_changed_at, token_version, is_active FROM users WHERE id = $1',
             [decoded.userId]
         );
         
-        if (pwCheck.rows.length === 0) {
-            return null; // User no longer exists
+        if (userCheck.rows.length === 0) {
+            return null;
         }
         
-        const pwChangedAt = pwCheck.rows[0].password_changed_at;
+        const userRow = userCheck.rows[0];
+        
+        // User suspended -> token invalid
+        if (userRow.is_active === false) {
+            return null;
+        }
+        
+        const pwChangedAt = userRow.password_changed_at;
         if (pwChangedAt) {
             const pwChangedTimestamp = Math.floor(new Date(pwChangedAt).getTime() / 1000);
             if (decoded.iat < pwChangedTimestamp) {
-                return null; // Token issued before password change - invalid
+                return null;
             }
+        }
+        
+        // Token version mismatch -> token invalid (for forced logout)
+        if (decoded.tv !== undefined && userRow.token_version !== decoded.tv) {
+            return null;
         }
         
         return decoded;
@@ -182,13 +249,32 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Configure Rate Limiter
-let ratelimit: Ratelimit | null = null;
+// ============================================================
+// RATE LIMITERS (Stage 1B - multiple tiers)
+// ============================================================
+let strictRatelimit: Ratelimit | null = null;       // 5/min - login, password reset
+let standardRatelimit: Ratelimit | null = null;     // 30/min - API calls
+let messagesRatelimit: Ratelimit | null = null;     // 20/min - messaging
+
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-    ratelimit = new Ratelimit({
-        redis: Redis.fromEnv(),
+    const redis = Redis.fromEnv();
+    strictRatelimit = new Ratelimit({
+        redis,
         limiter: Ratelimit.slidingWindow(5, '1 m'),
         analytics: true,
+        prefix: 'rl:strict',
+    });
+    standardRatelimit = new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(30, '1 m'),
+        analytics: true,
+        prefix: 'rl:std',
+    });
+    messagesRatelimit = new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(20, '1 m'),
+        analytics: true,
+        prefix: 'rl:msg',
     });
 } else {
     console.warn("WARNING: Upstash Redis credentials not found. Rate limiting is disabled.");
@@ -197,6 +283,9 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
 // Password Utils
 const SALT_ROUNDS = 12;
 const MAX_OTP_ATTEMPTS = 5;
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MINUTES = 15;
+const TOKEN_EXPIRY = '12h'; // Reduced from 24h
 
 const hashPassword = async (password: string) => {
   return await bcrypt.hash(password, SALT_ROUNDS);
@@ -208,7 +297,6 @@ const verifyPassword = async (password: string, storedHash: string) => {
 };
 
 // --- OTP VALIDATION HELPER ---
-// Centralized OTP check with attempt counter and timing-safe comparison
 const validateOtp = async (email: string, providedOtp: string): Promise<{ valid: boolean; error?: string }> => {
     const result = await query('SELECT * FROM password_resets WHERE email = $1', [email]);
     
@@ -218,21 +306,17 @@ const validateOtp = async (email: string, providedOtp: string): Promise<{ valid:
     
     const record = result.rows[0];
     
-    // Check expiry first
     if (new Date(record.expires_at) < new Date()) {
         await query('DELETE FROM password_resets WHERE email = $1', [email]);
         return { valid: false, error: 'Code expired. Please request a new one.' };
     }
     
-    // Check attempts BEFORE comparing to prevent abuse
     if (record.attempts >= MAX_OTP_ATTEMPTS) {
         await query('DELETE FROM password_resets WHERE email = $1', [email]);
         return { valid: false, error: 'Too many failed attempts. Please request a new code.' };
     }
     
-    // Timing-safe comparison
     if (!safeCompare(record.otp, providedOtp)) {
-        // Increment attempt counter
         await query(
             'UPDATE password_resets SET attempts = attempts + 1 WHERE email = $1',
             [email]
@@ -244,11 +328,14 @@ const validateOtp = async (email: string, providedOtp: string): Promise<{ valid:
 };
 
 export const handler = async (event: any) => {
+  // Get origin for CORS
+  const origin = event.headers?.origin || event.headers?.Origin;
+  
   // Handle Preflight
   if (event.httpMethod === 'OPTIONS') {
     return {
         statusCode: 204,
-        headers: CORS_HEADERS,
+        headers: getCorsHeaders(origin),
         body: ''
     };
   }
@@ -262,13 +349,12 @@ export const handler = async (event: any) => {
 
   const method = event.httpMethod;
   
-  // Parse body safely
   let body: any = {};
   if (event.body) {
       try {
           body = JSON.parse(event.body);
       } catch (e) {
-          return errorResponse(400, 'Invalid JSON body');
+          return errorResponse(400, 'Invalid JSON body', null, origin);
       }
   }
   
@@ -279,15 +365,26 @@ export const handler = async (event: any) => {
 
   console.log(`[API] ${method} /${cleanPath} [User: ${user ? user.role : 'Guest'}] [IP: ${clientIp}]`);
 
-  const checkRateLimit = async (identifier: string) => {
-      if (!ratelimit) return true;
-      const { success } = await ratelimit.limit(identifier);
+  // Rate limit helpers
+  const checkStrictLimit = async (id: string) => {
+      if (!strictRatelimit) return true;
+      const { success } = await strictRatelimit.limit(id);
+      return success;
+  };
+  const checkStandardLimit = async (id: string) => {
+      if (!standardRatelimit) return true;
+      const { success } = await standardRatelimit.limit(id);
+      return success;
+  };
+  const checkMessagesLimit = async (id: string) => {
+      if (!messagesRatelimit) return true;
+      const { success } = await messagesRatelimit.limit(id);
       return success;
   };
 
   try {
     if (cleanPath === '' || cleanPath === 'health') {
-        return response(200, { status: 'ok', message: 'Zilcycler API is running' });
+        return response(200, { status: 'ok', message: 'Zilcycler API is running' }, origin);
     }
 
     // ============================================================
@@ -295,39 +392,92 @@ export const handler = async (event: any) => {
     // ============================================================
     
     if (cleanPath === 'auth/login' && method === 'POST') {
-        if (!(await checkRateLimit(`login:${clientIp}`))) {
-            return errorResponse(429, 'Too many login attempts. Please try again later.');
+        if (!(await checkStrictLimit(`login:${clientIp}`))) {
+            return errorResponse(429, 'Too many login attempts. Please try again later.', null, origin);
         }
 
         const validation = validate(LoginSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
         
         const { email, password } = validation.data;
         
         const { rows } = await query('SELECT * FROM users WHERE email = $1', [email]);
         const dbUser = rows[0];
 
-        if (!dbUser) return errorResponse(401, 'Invalid email or password');
-        if (!dbUser.password_hash) return errorResponse(401, 'Account security update required. Please reset password.');
+        if (!dbUser) return errorResponse(401, 'Invalid email or password', null, origin);
+        if (!dbUser.password_hash) return errorResponse(401, 'Account security update required. Please reset password.', null, origin);
 
-        // Maintenance Mode Check (ADMIN only bypasses)
+        // SECURITY: Check account lockout
+        if (dbUser.locked_until && new Date(dbUser.locked_until) > new Date()) {
+            const minutesLeft = Math.ceil((new Date(dbUser.locked_until).getTime() - Date.now()) / 60000);
+            return errorResponse(429, `Account temporarily locked. Try again in ${minutesLeft} minute(s).`, null, origin);
+        }
+
+        // Maintenance Mode (ADMIN only bypasses)
         const configCheck = await query('SELECT maintenance_mode FROM system_config WHERE id = 1');
         if (configCheck.rows[0]?.maintenance_mode && dbUser.role !== 'ADMIN') {
-             return errorResponse(503, 'System is in maintenance mode. Please try again later.');
+             return errorResponse(503, 'System is in maintenance mode. Please try again later.', null, origin);
         }
 
         const isValid = await verifyPassword(password, dbUser.password_hash);
-        if (!isValid) return errorResponse(401, 'Invalid email or password');
-
-        if (!dbUser.is_active) {
-            return errorResponse(403, 'Account is suspended. Please contact support.');
+        
+        if (!isValid) {
+            // SECURITY: Increment failed login attempts and lock if threshold reached
+            const newFailedCount = (dbUser.failed_login_attempts || 0) + 1;
+            
+            if (newFailedCount >= MAX_LOGIN_ATTEMPTS) {
+                const lockUntil = new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000);
+                await query(
+                    'UPDATE users SET failed_login_attempts = $1, locked_until = $2 WHERE id = $3',
+                    [newFailedCount, lockUntil.toISOString(), dbUser.id]
+                );
+                
+                await auditLog({
+                    actorId: dbUser.id,
+                    actorRole: dbUser.role,
+                    action: 'ACCOUNT_LOCKED',
+                    targetType: 'user',
+                    targetId: dbUser.id,
+                    metadata: { reason: 'failed_login_threshold', attempts: newFailedCount },
+                    ipAddress: clientIp,
+                });
+                
+                return errorResponse(429, `Account locked for ${LOCKOUT_DURATION_MINUTES} minutes due to too many failed attempts.`, null, origin);
+            } else {
+                await query(
+                    'UPDATE users SET failed_login_attempts = $1 WHERE id = $2',
+                    [newFailedCount, dbUser.id]
+                );
+            }
+            
+            return errorResponse(401, 'Invalid email or password', null, origin);
         }
 
-        const token = jwt.sign(
-            { userId: dbUser.id, role: dbUser.role, email: dbUser.email },
-            JWT_SECRET,
-            { expiresIn: '24h' }
+        if (!dbUser.is_active) {
+            return errorResponse(403, 'Account is suspended. Please contact support.', null, origin);
+        }
+
+        // SECURITY: Reset failed attempts and update last login on success
+        await query(
+            'UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = CURRENT_TIMESTAMP WHERE id = $1',
+            [dbUser.id]
         );
+
+        const tokenVersion = dbUser.token_version || 1;
+        const token = jwt.sign(
+            { userId: dbUser.id, role: dbUser.role, email: dbUser.email, tv: tokenVersion },
+            JWT_SECRET,
+            { expiresIn: TOKEN_EXPIRY }
+        );
+
+        await auditLog({
+            actorId: dbUser.id,
+            actorRole: dbUser.role,
+            action: 'LOGIN_SUCCESS',
+            targetType: 'user',
+            targetId: dbUser.id,
+            ipAddress: clientIp,
+        });
 
         const userObj = {
             id: dbUser.id,
@@ -350,30 +500,34 @@ export const handler = async (event: any) => {
             }
         };
 
-        return response(200, { user: userObj, token });
+        return response(200, { user: userObj, token }, origin);
     }
 
     if (cleanPath === 'auth/verify' && method === 'GET') {
-        if (!user) return errorResponse(401, 'Invalid or expired token');
-        return response(200, { userId: user.userId, valid: true });
+        // Stage 1B: Add rate limit to prevent token enumeration
+        if (!(await checkStandardLimit(`verify:${clientIp}`))) {
+            return errorResponse(429, 'Too many requests', null, origin);
+        }
+        if (!user) return errorResponse(401, 'Invalid or expired token', null, origin);
+        return response(200, { userId: user.userId, valid: true }, origin);
     }
 
     if (cleanPath === 'auth/send-verification' && method === 'POST') {
-        if (!(await checkRateLimit(`send_verif:${clientIp}`))) {
-            return errorResponse(429, 'Too many verification requests. Please wait.');
+        if (!(await checkStrictLimit(`send_verif:${clientIp}`))) {
+            return errorResponse(429, 'Too many verification requests. Please wait.', null, origin);
         }
 
         const validation = validate(SendVerificationSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
 
         const configCheck = await query('SELECT allow_registrations FROM system_config WHERE id = 1');
         if (!configCheck.rows[0]?.allow_registrations) {
-             return errorResponse(403, 'New registrations are currently closed.');
+             return errorResponse(403, 'New registrations are currently closed.', null, origin);
         }
 
         const { email } = validation.data;
         const userCheck = await query('SELECT id FROM users WHERE email = $1', [email]);
-        if (userCheck.rows.length > 0) return errorResponse(409, 'Email already registered. Please login.');
+        if (userCheck.rows.length > 0) return errorResponse(409, 'Email already registered. Please login.', null, origin);
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
@@ -397,33 +551,30 @@ export const handler = async (event: any) => {
         } else if (!IS_PRODUCTION) {
              console.log(`[DEV] Verification OTP for ${email}: ${otp}`);
         }
-        return response(200, { message: "OTP sent" });
+        return response(200, { message: "OTP sent" }, origin);
     }
 
     if (cleanPath === 'auth/register' && method === 'POST') {
-        if (!(await checkRateLimit(`register:${clientIp}`))) {
-            return errorResponse(429, 'Too many registration attempts.');
+        if (!(await checkStrictLimit(`register:${clientIp}`))) {
+            return errorResponse(429, 'Too many registration attempts.', null, origin);
         }
 
-        // CRITICAL: Schema enforces role can only be HOUSEHOLD or ORGANIZATION
         const validation = validate(RegisterSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
 
         const configCheck = await query('SELECT allow_registrations FROM system_config WHERE id = 1');
         if (!configCheck.rows[0]?.allow_registrations) {
-             return errorResponse(403, 'Registrations closed.');
+             return errorResponse(403, 'Registrations closed.', null, origin);
         }
 
         const { user: regUser, password, otp } = validation.data;
         
-        // Validate OTP with timing-safe compare and attempt counter
         const otpCheck = await validateOtp(regUser.email, otp);
-        if (!otpCheck.valid) return errorResponse(400, otpCheck.error || 'Invalid code');
+        if (!otpCheck.valid) return errorResponse(400, otpCheck.error || 'Invalid code', null, origin);
 
-        // Double-check email isn't taken (race condition guard)
         const emailCheck = await query('SELECT id FROM users WHERE email = $1', [regUser.email]);
         if (emailCheck.rows.length > 0) {
-            return errorResponse(409, 'Email already registered.');
+            return errorResponse(409, 'Email already registered.', null, origin);
         }
 
         const passwordHash = await hashPassword(password);
@@ -435,7 +586,16 @@ export const handler = async (event: any) => {
         );
         await query('DELETE FROM password_resets WHERE email = $1', [regUser.email]);
 
-        // Welcome Email
+        await auditLog({
+            actorId: userId,
+            actorRole: regUser.role,
+            action: 'USER_REGISTERED',
+            targetType: 'user',
+            targetId: userId,
+            metadata: { email: regUser.email, role: regUser.role },
+            ipAddress: clientIp,
+        });
+
         if (process.env.SMTP_HOST) {
              try {
                 await transporter.sendMail({
@@ -449,21 +609,20 @@ export const handler = async (event: any) => {
              }
         }
 
-        return response(201, { message: "Account created", userId });
+        return response(201, { message: "Account created", userId }, origin);
     }
 
     if (cleanPath === 'auth/forgot-password' && method === 'POST') {
-        if (!(await checkRateLimit(`forgot_pw:${clientIp}`))) {
-            return errorResponse(429, 'Too many requests. Please wait.');
+        if (!(await checkStrictLimit(`forgot_pw:${clientIp}`))) {
+            return errorResponse(429, 'Too many requests. Please wait.', null, origin);
         }
 
         const validation = validate(ForgotPasswordSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
 
         const { email } = validation.data;
         const { rows } = await query('SELECT id FROM users WHERE email = $1', [email]);
         
-        // Account enumeration protection: always return same response
         if (rows.length > 0) {
             const otp = Math.floor(100000 + Math.random() * 900000).toString();
             const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
@@ -489,29 +648,42 @@ export const handler = async (event: any) => {
             }
         }
         
-        return response(200, { message: "If that email exists, we sent a reset code." });
+        return response(200, { message: "If that email exists, we sent a reset code." }, origin);
     }
 
     if (cleanPath === 'auth/reset-password' && method === 'POST') {
-        if (!(await checkRateLimit(`reset_pw:${clientIp}`))) {
-            return errorResponse(429, 'Too many attempts.');
+        if (!(await checkStrictLimit(`reset_pw:${clientIp}`))) {
+            return errorResponse(429, 'Too many attempts.', null, origin);
         }
 
         const validation = validate(ResetPasswordSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
 
         const { email, otp, newPassword } = validation.data;
         
         const otpCheck = await validateOtp(email, otp);
-        if (!otpCheck.valid) return errorResponse(400, otpCheck.error || 'Invalid code');
+        if (!otpCheck.valid) return errorResponse(400, otpCheck.error || 'Invalid code', null, origin);
         
         const passwordHash = await hashPassword(newPassword);
-        await query(
-            'UPDATE users SET password_hash = $1, password_changed_at = CURRENT_TIMESTAMP WHERE email = $2',
+        // Stage 1B: Bump token_version on password reset to invalidate ALL sessions
+        const userRes = await query(
+            'UPDATE users SET password_hash = $1, password_changed_at = CURRENT_TIMESTAMP, token_version = COALESCE(token_version, 1) + 1, failed_login_attempts = 0, locked_until = NULL WHERE email = $2 RETURNING id, role',
             [passwordHash, email]
         );
         await query('DELETE FROM password_resets WHERE email = $1', [email]);
-        return response(200, { success: true });
+        
+        if (userRes.rows[0]) {
+            await auditLog({
+                actorId: userRes.rows[0].id,
+                actorRole: userRes.rows[0].role,
+                action: 'PASSWORD_RESET',
+                targetType: 'user',
+                targetId: userRes.rows[0].id,
+                ipAddress: clientIp,
+            });
+        }
+        
+        return response(200, { success: true }, origin);
     }
 
     // ============================================================
@@ -519,23 +691,23 @@ export const handler = async (event: any) => {
     // ============================================================
     
     if (!user) {
-        return errorResponse(401, 'Unauthorized access');
+        return errorResponse(401, 'Unauthorized access', null, origin);
     }
 
     // --- CLOUDINARY SIGNING ---
     if (cleanPath === 'auth/sign-upload' && method === 'POST') {
-        if (!(await checkRateLimit(`upload_sign:${user.userId}`))) {
-            return errorResponse(429, 'Too many upload attempts.');
+        if (!(await checkStandardLimit(`upload_sign:${user.userId}`))) {
+            return errorResponse(429, 'Too many upload attempts.', null, origin);
         }
 
         const validation = validate(SignUploadSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
 
         const safeFolder = validation.data.folder || 'zilcycler_general';
         const timestamp = Math.round((new Date()).getTime() / 1000);
         
         if (!process.env.CLOUDINARY_API_SECRET || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_CLOUD_NAME) {
-            return errorResponse(500, 'Upload configuration error', 'Cloudinary env vars missing');
+            return errorResponse(500, 'Upload configuration error', 'Cloudinary env vars missing', origin);
         }
 
         const paramsToSign = `folder=${safeFolder}&timestamp=${timestamp}`;
@@ -548,25 +720,25 @@ export const handler = async (event: any) => {
             apiKey: process.env.CLOUDINARY_API_KEY,
             cloudName: process.env.CLOUDINARY_CLOUD_NAME,
             folder: safeFolder
-        });
+        }, origin);
     }
     
     // --- CHANGE PASSWORD ---
     if (cleanPath === 'auth/change-password/initiate' && method === 'POST') {
-        if (!(await checkRateLimit(`chg_pw_init:${user.userId}`))) {
-            return errorResponse(429, 'Too many requests.');
+        if (!(await checkStrictLimit(`chg_pw_init:${user.userId}`))) {
+            return errorResponse(429, 'Too many requests.', null, origin);
         }
 
         const validation = validate(ChangePasswordInitiateSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
 
         const { userId, currentPassword } = validation.data;
-        if (user.userId !== userId) return errorResponse(403, 'Forbidden');
+        if (user.userId !== userId) return errorResponse(403, 'Forbidden', null, origin);
 
         const { rows } = await query('SELECT email, password_hash FROM users WHERE id = $1', [userId]);
-        if (rows.length === 0) return errorResponse(404, 'User not found');
+        if (rows.length === 0) return errorResponse(404, 'User not found', null, origin);
         if (!(await verifyPassword(currentPassword, rows[0].password_hash))) {
-            return errorResponse(401, 'Incorrect password');
+            return errorResponse(401, 'Incorrect password', null, origin);
         }
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -591,34 +763,45 @@ export const handler = async (event: any) => {
              console.log(`[DEV] Change Password OTP for ${rows[0].email}: ${otp}`);
         }
 
-        return response(200, { message: "OTP sent" });
+        return response(200, { message: "OTP sent" }, origin);
     }
 
     if (cleanPath === 'auth/change-password/confirm' && method === 'POST') {
-        if (!(await checkRateLimit(`chg_pw_conf:${user.userId}`))) {
-            return errorResponse(429, 'Too many attempts.');
+        if (!(await checkStrictLimit(`chg_pw_conf:${user.userId}`))) {
+            return errorResponse(429, 'Too many attempts.', null, origin);
         }
 
         const validation = validate(ChangePasswordConfirmSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
 
         const { userId, otp, newPassword } = validation.data;
-        if (user.userId !== userId) return errorResponse(403, 'Forbidden');
+        if (user.userId !== userId) return errorResponse(403, 'Forbidden', null, origin);
         
-        const userRes = await query('SELECT email FROM users WHERE id = $1', [userId]);
-        if (userRes.rows.length === 0) return errorResponse(404, 'User not found');
+        const userRes = await query('SELECT email, role FROM users WHERE id = $1', [userId]);
+        if (userRes.rows.length === 0) return errorResponse(404, 'User not found', null, origin);
         const email = userRes.rows[0].email;
+        const userRole = userRes.rows[0].role;
         
         const otpCheck = await validateOtp(email, otp);
-        if (!otpCheck.valid) return errorResponse(400, otpCheck.error || 'Invalid code');
+        if (!otpCheck.valid) return errorResponse(400, otpCheck.error || 'Invalid code', null, origin);
 
         const passwordHash = await hashPassword(newPassword);
         await query(
-            'UPDATE users SET password_hash = $1, password_changed_at = CURRENT_TIMESTAMP WHERE id = $2',
+            'UPDATE users SET password_hash = $1, password_changed_at = CURRENT_TIMESTAMP, token_version = COALESCE(token_version, 1) + 1 WHERE id = $2',
             [passwordHash, userId]
         );
         await query('DELETE FROM password_resets WHERE email = $1', [email]);
-        return response(200, { success: true });
+        
+        await auditLog({
+            actorId: userId,
+            actorRole: userRole,
+            action: 'PASSWORD_CHANGED',
+            targetType: 'user',
+            targetId: userId,
+            ipAddress: clientIp,
+        });
+        
+        return response(200, { success: true }, origin);
     }
 
     // --- CONFIG & RATES ---
@@ -640,25 +823,34 @@ export const handler = async (event: any) => {
                 allowRegistrations: configRes.rows[0]?.allow_registrations || true
             },
             wasteRates: ratesObj
-        });
+        }, origin);
     }
     
     if (cleanPath === 'config/update' && method === 'POST') {
-        if (!isAdmin) return errorResponse(403, 'Admin only');
+        if (!isAdmin) return errorResponse(403, 'Admin only', null, origin);
         
         const validation = validate(UpdateConfigSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
         
         const { maintenanceMode, allowRegistrations } = validation.data;
         await query('UPDATE system_config SET maintenance_mode = $1, allow_registrations = $2 WHERE id = 1', [maintenanceMode, allowRegistrations]);
-        return response(200, { success: true });
+        
+        await auditLog({
+            actorId: user.userId,
+            actorRole: user.role,
+            action: 'CONFIG_UPDATED',
+            metadata: { maintenanceMode, allowRegistrations },
+            ipAddress: clientIp,
+        });
+        
+        return response(200, { success: true }, origin);
     }
     
     if (cleanPath === 'rates/update' && method === 'POST') {
-        if (!isAdmin) return errorResponse(403, 'Admin only');
+        if (!isAdmin) return errorResponse(403, 'Admin only', null, origin);
         
         const validation = validate(UpdateRatesSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
         
         const { rates } = validation.data;
         for (const [category, data] of Object.entries(rates)) {
@@ -667,20 +859,29 @@ export const handler = async (event: any) => {
                 [category, data.rate, data.co2]
             );
         }
-        return response(200, { success: true });
+        
+        await auditLog({
+            actorId: user.userId,
+            actorRole: user.role,
+            action: 'RATES_UPDATED',
+            metadata: { rates },
+            ipAddress: clientIp,
+        });
+        
+        return response(200, { success: true }, origin);
     }
 
     // --- BLOG ---
     if (cleanPath === 'blog') {
         if (method === 'GET') {
             const { rows } = await query('SELECT * FROM blog_posts ORDER BY created_at DESC');
-            return response(200, rows);
+            return response(200, rows, origin);
         }
         if (method === 'POST') {
-            if (!isAdminOrStaff) return errorResponse(403, 'Forbidden');
+            if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
             
             const validation = validate(CreateBlogPostSchema, body);
-            if (!validation.success) return errorResponse(400, validation.error);
+            if (!validation.success) return errorResponse(400, validation.error, null, origin);
             
             const p = validation.data;
             const postId = `blog_${randomUUID()}`;
@@ -688,16 +889,37 @@ export const handler = async (event: any) => {
                 'INSERT INTO blog_posts (id, title, category, excerpt, image) VALUES ($1, $2, $3, $4, $5)',
                 [postId, p.title, p.category, p.excerpt, p.image]
             );
-            return response(201, { success: true, id: postId });
+            
+            await auditLog({
+                actorId: user.userId,
+                actorRole: user.role,
+                action: 'BLOG_POST_CREATED',
+                targetType: 'blog_post',
+                targetId: postId,
+                metadata: { title: p.title },
+                ipAddress: clientIp,
+            });
+            
+            return response(201, { success: true, id: postId }, origin);
         }
         if (method === 'DELETE') {
-            if (!isAdminOrStaff) return errorResponse(403, 'Forbidden');
+            if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
             
             const validation = validate(DeleteBlogPostSchema, body);
-            if (!validation.success) return errorResponse(400, validation.error);
+            if (!validation.success) return errorResponse(400, validation.error, null, origin);
             
             await query('DELETE FROM blog_posts WHERE id = $1', [validation.data.id]);
-            return response(200, { success: true });
+            
+            await auditLog({
+                actorId: user.userId,
+                actorRole: user.role,
+                action: 'BLOG_POST_DELETED',
+                targetType: 'blog_post',
+                targetId: validation.data.id,
+                ipAddress: clientIp,
+            });
+            
+            return response(200, { success: true }, origin);
         }
     }
 
@@ -714,7 +936,7 @@ export const handler = async (event: any) => {
                 lat: parseFloat(l.lat),
                 lng: parseFloat(l.lng)
             }));
-            return response(200, locations);
+            return response(200, locations, origin);
         }
     }
 
@@ -731,13 +953,13 @@ export const handler = async (event: any) => {
                 url: c.url,
                 dateIssued: c.created_at
             }));
-            return response(200, certs);
+            return response(200, certs, origin);
         }
         if (method === 'POST') {
-            if (!isAdminOrStaff) return errorResponse(403, 'Forbidden');
+            if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
             
             const validation = validate(CreateCertificateSchema, body);
-            if (!validation.success) return errorResponse(400, validation.error);
+            if (!validation.success) return errorResponse(400, validation.error, null, origin);
             
             const c = validation.data;
             const certId = `cert_${randomUUID()}`;
@@ -745,7 +967,18 @@ export const handler = async (event: any) => {
                 'INSERT INTO certificates (id, org_id, org_name, month, year, url) VALUES ($1, $2, $3, $4, $5, $6)',
                 [certId, c.orgId, c.orgName, c.month, c.year, c.url]
             );
-            return response(201, { success: true, id: certId });
+            
+            await auditLog({
+                actorId: user.userId,
+                actorRole: user.role,
+                action: 'CERTIFICATE_ISSUED',
+                targetType: 'certificate',
+                targetId: certId,
+                metadata: { orgId: c.orgId, month: c.month, year: c.year },
+                ipAddress: clientIp,
+            });
+            
+            return response(201, { success: true, id: certId }, origin);
         }
     }
 
@@ -798,22 +1031,20 @@ export const handler = async (event: any) => {
             };
         });
         
-        return response(200, formattedUsers);
+        return response(200, formattedUsers, origin);
       }
       
       if (method === 'POST') {
-        // SECURITY: Only ADMIN can create users (Staff/Collector accounts)
-        if (!isAdmin) return errorResponse(403, 'Only admins can create users manually');
+        if (!isAdmin) return errorResponse(403, 'Only admins can create users manually', null, origin);
         
         const validation = validate(CreateUserSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
         
         const { name, email, role, phone, password, gender, address, industry, avatar } = validation.data;
         
-        // Check email isn't taken
         const emailCheck = await query('SELECT id FROM users WHERE email = $1', [email]);
         if (emailCheck.rows.length > 0) {
-            return errorResponse(409, 'Email already registered');
+            return errorResponse(409, 'Email already registered', null, origin);
         }
         
         const passwordHash = await hashPassword(password);
@@ -823,32 +1054,47 @@ export const handler = async (event: any) => {
             `INSERT INTO users (id, name, email, role, phone, avatar, password_hash, gender, address, industry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
             [userId, name, email, role, phone, avatar || '', passwordHash, gender, address, industry]
         );
-        return response(201, { message: "User created", userId });
+        
+        await auditLog({
+            actorId: user.userId,
+            actorRole: user.role,
+            action: 'USER_CREATED_BY_ADMIN',
+            targetType: 'user',
+            targetId: userId,
+            metadata: { email, role },
+            ipAddress: clientIp,
+        });
+        
+        return response(201, { message: "User created", userId }, origin);
       }
 
       if (method === 'PUT') {
           const validation = validate(UpdateUserSchema, body);
-          if (!validation.success) return errorResponse(400, validation.error);
+          if (!validation.success) return errorResponse(400, validation.error, null, origin);
           
           const { id, updates } = validation.data;
-          if (user.userId !== id && !isAdminOrStaff) return errorResponse(403, 'Forbidden');
+          if (user.userId !== id && !isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
 
-          // SECURITY: Strip privileged fields based on role
           const safeUpdates: any = { ...updates };
           
           if (!isAdminOrStaff) {
-              // Regular users can't change these
               delete safeUpdates.zointsBalance;
               delete safeUpdates.isActive;
               delete safeUpdates.role;
               delete safeUpdates.esgScore;
           }
           
-          // SECURITY: Only ADMIN can credit balances directly (not Staff)
           if (!isAdmin) {
               delete safeUpdates.zointsBalance;
               delete safeUpdates.role;
           }
+
+          // Track sensitive admin actions for audit
+          const sensitiveChanges: any = {};
+          if (safeUpdates.isActive !== undefined) sensitiveChanges.isActive = safeUpdates.isActive;
+          if (safeUpdates.zointsBalance !== undefined) sensitiveChanges.zointsBalance = safeUpdates.zointsBalance;
+          if (safeUpdates.role !== undefined) sensitiveChanges.role = safeUpdates.role;
+          if (safeUpdates.esgScore !== undefined) sensitiveChanges.esgScore = safeUpdates.esgScore;
 
           if (safeUpdates.isActive !== undefined) await query('UPDATE users SET is_active = $1 WHERE id = $2', [safeUpdates.isActive, id]);
           if (safeUpdates.zointsBalance !== undefined) await query('UPDATE users SET zoints_balance = $1 WHERE id = $2', [safeUpdates.zointsBalance, id]);
@@ -867,7 +1113,21 @@ export const handler = async (event: any) => {
                   [safeUpdates.bankDetails.bankName, encryptedAccNum, safeUpdates.bankDetails.accountName, id]
               );
           }
-          return response(200, { success: true });
+          
+          // Audit if sensitive fields changed
+          if (Object.keys(sensitiveChanges).length > 0) {
+              await auditLog({
+                  actorId: user.userId,
+                  actorRole: user.role,
+                  action: 'USER_UPDATED_PRIVILEGED',
+                  targetType: 'user',
+                  targetId: id,
+                  metadata: sensitiveChanges,
+                  ipAddress: clientIp,
+              });
+          }
+          
+          return response(200, { success: true }, origin);
       }
     }
 
@@ -888,17 +1148,16 @@ export const handler = async (event: any) => {
             weight: parseFloat(p.weight || 0),
             collectionDetails: p.collection_details
         }));
-        return response(200, pickups);
+        return response(200, pickups, origin);
       }
 
       if (method === 'POST') {
         const validation = validate(CreatePickupSchema, body);
-        if (!validation.success) return errorResponse(400, validation.error);
+        if (!validation.success) return errorResponse(400, validation.error, null, origin);
         
         const p = validation.data;
-        if (p.userId !== user.userId && !isAdminOrStaff) return errorResponse(403, 'Cannot schedule for others');
+        if (p.userId !== user.userId && !isAdminOrStaff) return errorResponse(403, 'Cannot schedule for others', null, origin);
         
-        // SECURITY: Force status to 'Pending' on creation - prevent client setting Completed
         const pickupId = `P-${randomUUID().substring(0,8).toUpperCase()}`;
 
         await query(
@@ -906,72 +1165,60 @@ export const handler = async (event: any) => {
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
             [pickupId, p.userId, p.location, p.time, p.date, p.items, 'Pending', p.contact, p.phoneNumber, p.wasteImage]
         );
-        return response(201, { success: true, id: pickupId });
+        return response(201, { success: true, id: pickupId }, origin);
       }
 
       if (method === 'PUT') {
           const validation = validate(UpdatePickupSchema, body);
-          if (!validation.success) return errorResponse(400, validation.error);
+          if (!validation.success) return errorResponse(400, validation.error, null, origin);
           
           const { id, updates } = validation.data;
           
-          // Fetch current pickup state for authorization and replay protection
           const pickupRes = await query('SELECT * FROM pickups WHERE id = $1', [id]);
-          if (pickupRes.rows.length === 0) return errorResponse(404, 'Pickup not found');
+          if (pickupRes.rows.length === 0) return errorResponse(404, 'Pickup not found', null, origin);
           const currentPickup = pickupRes.rows[0];
           
-          // SECURITY: Authorization checks
-          // - Status changes: Staff/Admin always; Collector only on their assigned pickups
-          // - Driver assignment: Staff/Admin only
-          // - Weight/completion: Staff/Admin always; Collector only on their assigned pickups
-          
-          const isAssignedCollector = user.role === 'COLLECTOR' && currentPickup.driver === user.email; 
-          // NOTE: driver is stored as name in current system. We check by name fallback below for safety.
-          // This will be tightened in a future migration.
-          
-          const isCollectorOnThisPickup = user.role === 'COLLECTOR';
-          // Collectors operating on pickups must have it assigned to them
-          // We do a name-based match because that's how the existing system works
-          
-          // --- DRIVER ASSIGNMENT (Staff/Admin only) ---
           if (updates.driver !== undefined) {
-              if (!isAdminOrStaff) return errorResponse(403, 'Only staff can assign drivers');
+              if (!isAdminOrStaff) return errorResponse(403, 'Only staff can assign drivers', null, origin);
               await query('UPDATE pickups SET driver = $1 WHERE id = $2', [updates.driver, id]);
+              
+              await auditLog({
+                  actorId: user.userId,
+                  actorRole: user.role,
+                  action: 'PICKUP_DRIVER_ASSIGNED',
+                  targetType: 'pickup',
+                  targetId: id,
+                  metadata: { driver: updates.driver },
+                  ipAddress: clientIp,
+              });
           }
           
-          // --- WEIGHT/COMPLETION FLOW ---
           if (updates.weight !== undefined) {
-              // Only Collector (assigned), Staff, or Admin can complete
               if (!isAdminOrStaff && user.role !== 'COLLECTOR') {
-                  return errorResponse(403, 'Forbidden');
+                  return errorResponse(403, 'Forbidden', null, origin);
               }
               
-              // For collectors, verify they're assigned to this pickup by name match
               if (user.role === 'COLLECTOR') {
                   const collectorRes = await query('SELECT name FROM users WHERE id = $1', [user.userId]);
                   const collectorName = collectorRes.rows[0]?.name;
                   if (currentPickup.driver !== collectorName) {
-                      return errorResponse(403, 'You are not assigned to this pickup');
+                      return errorResponse(403, 'You are not assigned to this pickup', null, origin);
                   }
               }
               
-              // SECURITY: Replay protection - only credit if not already Completed
               if (currentPickup.status === 'Completed') {
-                  return errorResponse(409, 'Pickup already completed');
+                  return errorResponse(409, 'Pickup already completed', null, origin);
               }
               
-              // Validate earnedZoints matches collectionDetails sum (prevent client tampering)
               if (updates.collectionDetails && updates.earnedZoints !== undefined) {
                   const calculatedTotal = updates.collectionDetails.reduce(
                       (sum, item) => sum + (item.earned || 0), 0
                   );
-                  // Allow small floating point tolerance
                   if (Math.abs(calculatedTotal - updates.earnedZoints) > 1) {
-                      return errorResponse(400, 'Earnings do not match collection details');
+                      return errorResponse(400, 'Earnings do not match collection details', null, origin);
                   }
               }
               
-              // Atomic update with transaction-like guard
               const newStatus = updates.status || 'Completed';
               const updateResult = await query(
                   `UPDATE pickups 
@@ -981,32 +1228,51 @@ export const handler = async (event: any) => {
                   [newStatus, updates.weight, updates.earnedZoints || 0, JSON.stringify(updates.collectionDetails || []), id]
               );
               
-              // Only credit balance if the update actually changed the row (replay-safe)
               if (updateResult.rows.length > 0 && updates.earnedZoints && updates.earnedZoints > 0) {
                   await query(
                       'UPDATE users SET zoints_balance = zoints_balance + $1 WHERE id = $2',
                       [updates.earnedZoints, updateResult.rows[0].user_id]
                   );
+                  
+                  await auditLog({
+                      actorId: user.userId,
+                      actorRole: user.role,
+                      action: 'PICKUP_COMPLETED',
+                      targetType: 'pickup',
+                      targetId: id,
+                      metadata: { 
+                          userId: updateResult.rows[0].user_id,
+                          weight: updates.weight, 
+                          earnedZoints: updates.earnedZoints 
+                      },
+                      ipAddress: clientIp,
+                  });
               }
               
-              return response(200, { success: true });
+              return response(200, { success: true }, origin);
           }
           
-          // --- STATUS-ONLY UPDATE (no weight) ---
           if (updates.status !== undefined && updates.weight === undefined) {
-              // Status changes without weight (e.g. Missed, Pending, Assigned)
-              // Staff/Admin only - users can't change pickup status arbitrarily
-              if (!isAdminOrStaff) return errorResponse(403, 'Forbidden');
+              if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
               
-              // SECURITY: Don't allow setting to Completed without weight (use weight flow)
               if (updates.status === 'Completed') {
-                  return errorResponse(400, 'Cannot mark Completed without collection details');
+                  return errorResponse(400, 'Cannot mark Completed without collection details', null, origin);
               }
               
               await query('UPDATE pickups SET status = $1 WHERE id = $2', [updates.status, id]);
+              
+              await auditLog({
+                  actorId: user.userId,
+                  actorRole: user.role,
+                  action: 'PICKUP_STATUS_CHANGED',
+                  targetType: 'pickup',
+                  targetId: id,
+                  metadata: { from: currentPickup.status, to: updates.status },
+                  ipAddress: clientIp,
+              });
           }
           
-          return response(200, { success: true });
+          return response(200, { success: true }, origin);
       }
     }
 
@@ -1027,22 +1293,21 @@ export const handler = async (event: any) => {
                 status: r.status,
                 date: r.date
             }));
-            return response(200, requests);
+            return response(200, requests, origin);
         }
         if (method === 'POST') {
             const validation = validate(CreateRedemptionSchema, body);
-            if (!validation.success) return errorResponse(400, validation.error);
+            if (!validation.success) return errorResponse(400, validation.error, null, origin);
             
             const r = validation.data;
-            if (r.userId !== user.userId) return errorResponse(403, 'Forbidden');
+            if (r.userId !== user.userId) return errorResponse(403, 'Forbidden', null, origin);
             
-            // SECURITY: Check user has sufficient balance BEFORE deducting
             const balanceCheck = await query('SELECT zoints_balance FROM users WHERE id = $1', [user.userId]);
-            if (balanceCheck.rows.length === 0) return errorResponse(404, 'User not found');
+            if (balanceCheck.rows.length === 0) return errorResponse(404, 'User not found', null, origin);
             const currentBalance = parseFloat(balanceCheck.rows[0].zoints_balance);
             
             if (currentBalance < r.amount) {
-                return errorResponse(400, 'Insufficient balance');
+                return errorResponse(400, 'Insufficient balance', null, origin);
             }
 
             const reqId = `REQ-${randomUUID().substring(0,8).toUpperCase()}`;
@@ -1058,27 +1323,35 @@ export const handler = async (event: any) => {
                     [r.amount, r.userId]
                 );
                 await query('COMMIT');
-                return response(201, { success: true, id: reqId });
+                
+                await auditLog({
+                    actorId: user.userId,
+                    actorRole: user.role,
+                    action: 'REDEMPTION_REQUESTED',
+                    targetType: 'redemption',
+                    targetId: reqId,
+                    metadata: { type: r.type, amount: r.amount },
+                    ipAddress: clientIp,
+                });
+                
+                return response(201, { success: true, id: reqId }, origin);
             } catch (e) {
                 await query('ROLLBACK');
                 throw e;
             }
         }
         if (method === 'PUT') {
-            if (!isAdminOrStaff) return errorResponse(403, 'Forbidden');
+            if (!isAdminOrStaff) return errorResponse(403, 'Forbidden', null, origin);
             
             const validation = validate(UpdateRedemptionSchema, body);
-            if (!validation.success) return errorResponse(400, validation.error);
+            if (!validation.success) return errorResponse(400, validation.error, null, origin);
             
             const { id, status } = validation.data;
             
-            // Fetch current state for safe refund logic
             const reqRes = await query('SELECT * FROM redemption_requests WHERE id = $1', [id]);
-            if (reqRes.rows.length === 0) return errorResponse(404, 'Request not found');
+            if (reqRes.rows.length === 0) return errorResponse(404, 'Request not found', null, origin);
             const currentReq = reqRes.rows[0];
             
-            // SECURITY: Only refund on Pending -> Rejected, never on Approved -> Rejected
-            // Also use 'refunded' flag to prevent double-refunds
             if (status === 'Rejected') {
                 if (currentReq.status === 'Pending' && !currentReq.refunded) {
                     await query('BEGIN');
@@ -1097,15 +1370,27 @@ export const handler = async (event: any) => {
                         throw e;
                     }
                 } else {
-                    // Just update status without refund
                     await query('UPDATE redemption_requests SET status = $1 WHERE id = $2', [status, id]);
                 }
             } else {
-                // Approved - just update status, money already deducted at creation
                 await query('UPDATE redemption_requests SET status = $1 WHERE id = $2', [status, id]);
             }
             
-            return response(200, { success: true });
+            await auditLog({
+                actorId: user.userId,
+                actorRole: user.role,
+                action: status === 'Approved' ? 'REDEMPTION_APPROVED' : 'REDEMPTION_REJECTED',
+                targetType: 'redemption',
+                targetId: id,
+                metadata: { 
+                    userId: currentReq.user_id, 
+                    amount: parseFloat(currentReq.amount),
+                    previousStatus: currentReq.status,
+                },
+                ipAddress: clientIp,
+            });
+            
+            return response(200, { success: true }, origin);
         }
     }
 
@@ -1121,32 +1406,35 @@ export const handler = async (event: any) => {
                 createdAt: m.created_at,
                 isRead: m.is_read
             }));
-            return response(200, messages);
+            return response(200, messages, origin);
         }
         if (method === 'POST') {
+            // Stage 1B: Per-user rate limit on messages
+            if (!(await checkMessagesLimit(`msg:${user.userId}`))) {
+                return errorResponse(429, 'You are sending messages too quickly. Please slow down.', null, origin);
+            }
+            
             const validation = validate(CreateMessageSchema, body);
-            if (!validation.success) return errorResponse(400, validation.error);
+            if (!validation.success) return errorResponse(400, validation.error, null, origin);
             
             const m = validation.data;
-            if (m.senderId !== user.userId) return errorResponse(403, 'Identity mismatch');
+            if (m.senderId !== user.userId) return errorResponse(403, 'Identity mismatch', null, origin);
             
-            // SECURITY: Verify receiver exists (prevents enumeration attacks)
             const receiverCheck = await query('SELECT id FROM users WHERE id = $1', [m.receiverId]);
-            if (receiverCheck.rows.length === 0) return errorResponse(404, 'Recipient not found');
+            if (receiverCheck.rows.length === 0) return errorResponse(404, 'Recipient not found', null, origin);
             
             const msgId = `msg_${randomUUID()}`;
             await query(
                 'INSERT INTO messages (id, sender_id, receiver_id, content) VALUES ($1, $2, $3, $4)',
                 [msgId, m.senderId, m.receiverId, m.content]
             );
-            return response(201, { success: true, id: msgId });
+            return response(201, { success: true, id: msgId }, origin);
         }
     }
 
-    return errorResponse(404, `Endpoint not found: ${cleanPath}`);
+    return errorResponse(404, `Endpoint not found: ${cleanPath}`, null, origin);
 
   } catch (err: any) {
-    // SECURITY: Don't leak internal error messages in production
-    return errorResponse(500, 'An unexpected error occurred', err);
+    return errorResponse(500, 'An unexpected error occurred', err, origin);
   }
 };

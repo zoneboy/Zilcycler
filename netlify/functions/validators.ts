@@ -75,8 +75,17 @@ export const ChangePasswordConfirmSchema = z.object({
   newPassword: PasswordSchema,
 });
 
+// --- Cloudinary upload folder allowlist (Stage 1B) ---
+export const ALLOWED_UPLOAD_FOLDERS = [
+  'zilcycler_general',
+  'zilcycler_avatars',
+  'zilcycler_pickups',
+  'zilcycler_certificates',
+  'zilcycler_blog',
+] as const;
+
 export const SignUploadSchema = z.object({
-  folder: z.string().trim().regex(/^[a-zA-Z0-9_]+$/, 'Folder name must be alphanumeric').max(100).optional(),
+  folder: z.enum(ALLOWED_UPLOAD_FOLDERS).optional(),
 });
 
 // --- User Endpoint Schemas ---
