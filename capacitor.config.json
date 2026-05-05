@@ -3,6 +3,46 @@
   "appName": "Zilcycler",
   "webDir": "dist",
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "launchAutoHide": true,
+      "launchFadeOutDuration": 300,
+      "backgroundColor": "#15803d",
+      "androidSplashResourceName": "splash",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": true,
+      "androidSpinnerStyle": "large",
+      "spinnerColor": "#ffffff",
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "StatusBar": {
+      "backgroundColor": "#15803d",
+      "style": "DARK",
+      "overlaysWebView": false
+    },
+    "Camera": {
+      "permissions": {
+        "camera": "We need camera access so you can take photos of waste for pickup verification.",
+        "photos": "We need access to your photos so you can attach images to pickup requests."
+      }
+    },
+    "Geolocation": {
+      "permissions": {
+        "location": "We need your location to show nearby drop-off centers and calculate distances."
+      }
+    },
+    "Preferences": {
+      "group": "ZilcyclerSecure"
+    }
   }
 }
