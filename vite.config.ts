@@ -12,7 +12,7 @@ export default defineConfig({
         short_name: 'Zilcycler',
         description: 'Recycle & Earn Rewards',
         theme_color: '#15803d',
-        background_color: '#ffffff',
+        background_color: '#15803d',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
@@ -21,20 +21,24 @@ export default defineConfig({
             src: 'pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
           },
           {
             src: 'pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
+          },
+          {
+            src: 'pwa-maskable-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
           }
         ]
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        // Skip Google Fonts caching - browser handles font caching natively
-        // Cloudinary images are cached on-demand only
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/res\.cloudinary\.com\/.*/i,
@@ -51,7 +55,6 @@ export default defineConfig({
             },
           },
         ],
-        // Don't fall back to index.html for API or external requests
         navigateFallbackDenylist: [/^\/api/, /^\/\.netlify/],
       },
     })
