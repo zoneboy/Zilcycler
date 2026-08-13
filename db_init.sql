@@ -30,12 +30,25 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS esg_score VARCHAR(10);
 -- Ensure account_number allows long text (for encryption) if it was previously varchar
 ALTER TABLE users ALTER COLUMN account_number TYPE TEXT;
 
+-- Security Hardening Migration (Stage 1B / 2C) - required by auth/login and account deletion
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INT DEFAULT 1;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMP;
+
 -- Password Resets Table
 CREATE TABLE IF NOT EXISTS password_resets (
     email VARCHAR(255) PRIMARY KEY,
     otp VARCHAR(10) NOT NULL,
-    expires_at TIMESTAMP NOT NULL
+    expires_at TIMESTAMP NOT NULL,
+    attempts INT DEFAULT 0
 );
+
+-- OTP brute-force protection migration
+ALTER TABLE password_resets ADD COLUMN IF NOT EXISTS attempts INT DEFAULT 0;
 
 -- Pickups Table
 CREATE TABLE IF NOT EXISTS pickups (
@@ -97,8 +110,12 @@ CREATE TABLE IF NOT EXISTS redemption_requests (
     amount DECIMAL(10, 2),
     status VARCHAR(50) DEFAULT 'Pending',
     date VARCHAR(50),
+    refunded BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Refund tracking migration
+ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS refunded BOOLEAN DEFAULT FALSE;
 
 -- Blog Posts Table
 CREATE TABLE IF NOT EXISTS blog_posts (
@@ -139,6 +156,45 @@ ON CONFLICT (id) DO UPDATE SET
     lat = EXCLUDED.lat,
     lng = EXCLUDED.lng,
     address = EXCLUDED.address;
+
+-- Audit Log Table (Security Hardening - written by auditLog() in api.ts)
+CREATE TABLE IF NOT EXISTS audit_log (
+    id SERIAL PRIMARY KEY,
+    actor_id VARCHAR(255),
+    actor_role VARCHAR(50),
+    action VARCHAR(100) NOT NULL,
+    target_type VARCHAR(50),
+    target_id VARCHAR(255),
+    metadata JSONB,
+    ip_address VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Error Log Table (Stage 2C - client error reporting via POST /log/error)
+CREATE TABLE IF NOT EXISTS error_log (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255),
+    error_type VARCHAR(100),
+    error_message TEXT,
+    error_stack TEXT,
+    user_agent TEXT,
+    app_version VARCHAR(50),
+    platform VARCHAR(50),
+    url TEXT,
+    metadata JSONB,
+    ip_address VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- App Versions Table (Stage 2C - version check via POST /health/version)
+CREATE TABLE IF NOT EXISTS app_versions (
+    platform VARCHAR(50) PRIMARY KEY,
+    current_version VARCHAR(20) NOT NULL,
+    minimum_version VARCHAR(20) NOT NULL,
+    update_message TEXT,
+    update_url TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Messages Table
 CREATE TABLE IF NOT EXISTS messages (
