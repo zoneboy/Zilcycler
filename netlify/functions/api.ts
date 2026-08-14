@@ -298,31 +298,23 @@ export const handler = async (event: any) => {
 
   console.log(`[API] ${method} /${cleanPath} [User: ${user ? user.role : 'Guest'}] [IP: ${clientIp}]`);
 
-  const checkStrictLimit = async (id: string) => {
-      if (!strictRatelimit) return true;
-      const { success } = await strictRatelimit.limit(id);
-      return success;
+  // Fail open if the rate limit backend is unreachable — a Redis outage or bad
+  // credentials must not take down every rate-limited endpoint (login included).
+  const safeLimit = async (limiter: Ratelimit | null, id: string) => {
+      if (!limiter) return true;
+      try {
+          const { success } = await limiter.limit(id);
+          return success;
+      } catch (e) {
+          console.error('RATE LIMIT ERROR (failing open):', e);
+          return true;
+      }
   };
-  const checkStandardLimit = async (id: string) => {
-      if (!standardRatelimit) return true;
-      const { success } = await standardRatelimit.limit(id);
-      return success;
-  };
-  const checkMessagesLimit = async (id: string) => {
-      if (!messagesRatelimit) return true;
-      const { success } = await messagesRatelimit.limit(id);
-      return success;
-  };
-  const checkVerifyLimit = async (id: string) => {
-      if (!verifyRatelimit) return true;
-      const { success } = await verifyRatelimit.limit(id);
-      return success;
-  };
-  const checkErrorLogLimit = async (id: string) => {
-      if (!errorLogRatelimit) return true;
-      const { success } = await errorLogRatelimit.limit(id);
-      return success;
-  };
+  const checkStrictLimit = (id: string) => safeLimit(strictRatelimit, id);
+  const checkStandardLimit = (id: string) => safeLimit(standardRatelimit, id);
+  const checkMessagesLimit = (id: string) => safeLimit(messagesRatelimit, id);
+  const checkVerifyLimit = (id: string) => safeLimit(verifyRatelimit, id);
+  const checkErrorLogLimit = (id: string) => safeLimit(errorLogRatelimit, id);
 
   try {
     if (cleanPath === '' || cleanPath === 'health') {
