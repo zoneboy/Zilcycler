@@ -327,7 +327,9 @@ const MainApp: React.FC = () => {
   return (
     <>
       {offlineBanner}
-      <div className={`bg-gray-50 dark:bg-gray-900 min-h-screen flex justify-center font-sans text-gray-900 dark:text-gray-100 transition-colors duration-300 ${!isOnline ? 'pt-10' : ''}`}>
+      {/* pt-safe: Android 15+ forces edge-to-edge, so the webview draws under the
+          status bar. env(safe-area-inset-top) is 0 on web and older devices. */}
+      <div className={`bg-gray-50 dark:bg-gray-900 min-h-screen flex justify-center font-sans text-gray-900 dark:text-gray-100 transition-colors duration-300 ${!isOnline ? 'pt-10' : 'pt-safe'}`}>
         <div className="w-full max-w-md bg-white dark:bg-gray-900 min-h-screen shadow-2xl relative flex flex-col transition-colors duration-300">
           
           {currentScreen !== Screen.DASHBOARD && (
