@@ -38,4 +38,14 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Geolocation: used by the Drop-Off Locations screen to show nearby centers.
+         The Capacitor 8 Geolocation plugin declares no permissions of its own, so
+         they must be declared here or requestPermissions() always fails. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- Location is optional: the app falls back to a non-located list, and this
+         keeps the app installable on devices without GPS hardware. -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 </manifest>
