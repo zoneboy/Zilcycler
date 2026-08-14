@@ -229,7 +229,9 @@ export const UpdateRatesSchema = z.object({
 export const CreateBlogPostSchema = z.object({
   title: z.string().trim().min(1).max(500),
   category: z.string().trim().max(100),
-  excerpt: LongTextSchema,
+  // Rich text HTML (headings, bold, links, images) — markup needs more room
+  // than plain text. Sanitized client-side before render.
+  excerpt: z.string().trim().min(1).max(20000),
   image: z.string().max(2000),
 });
 

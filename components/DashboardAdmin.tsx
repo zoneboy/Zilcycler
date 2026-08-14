@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, UserRole, WasteRates, PickupTask, RedemptionRequest, BlogPost, Certificate } from '../types';
+import { ZOINTS_RATE_NAIRA } from '../constants';
+import { stripHtml } from '../utils/html';
+import RichTextEditor from './RichTextEditor';
 import { useApp } from '../context/AppContext';
 import { Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import { Users, Settings, LogOut, ArrowLeft, Ban, CheckCircle, ShieldAlert, Save, Coins, Search, Mail, Phone, ChevronRight, Truck, Calendar, ArrowDownUp, X, Filter, MapPin, Package, User as UserIcon, AlertTriangle, ImageIcon, Download, Loader2, Scale, FileText, Banknote, Lock, Landmark, UserPlus, BookOpen, Trash2, Plus, Image as ImageIcon2, Shield, FileBadge, Upload, Leaf, Maximize2 } from 'lucide-react';
@@ -406,6 +409,10 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
 
   const handleAddTip = (e: React.FormEvent) => {
       e.preventDefault();
+      if (!stripHtml(newTip.excerpt)) {
+          alert('Content is required.');
+          return;
+      }
       const newPost: BlogPost = {
           id: '', // Server generated
           title: newTip.title,
@@ -473,14 +480,24 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
       document.body.removeChild(link);
   };
 
+  // Naira value of a redemption. Uses the value locked in at request time;
+  // legacy rows (no stored value) fall back to an estimate at today's rate.
+  const getRedemptionCash = (req: RedemptionRequest) => ({
+      value: req.cashValue ?? req.amount * ZOINTS_RATE_NAIRA,
+      isEstimate: req.cashValue === null || req.cashValue === undefined,
+  });
+
   const handleExportRequests = (data: RedemptionRequest[]) => {
-      let csvContent = "data:text/csv;charset=utf-8,ID,User,Type,Amount (Z),Status,Date\n";
+      let csvContent = "data:text/csv;charset=utf-8,ID,User,Type,Amount (Z),Cash Value (NGN),Cash Value Basis,Status,Date\n";
       data.forEach(req => {
+          const cash = getRedemptionCash(req);
           const row = [
               req.id,
               `"${req.userName}"`,
               req.type,
               req.amount,
+              cash.value.toFixed(2),
+              cash.isEstimate ? 'Estimated at current rate' : 'Locked at request time',
               req.status,
               req.date
           ].join(",");
@@ -811,6 +828,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                    ) : (
                        pending.map(req => {
                          const reqUser = users.find(u => u.id === req.userId);
+                         const cash = getRedemptionCash(req);
                          return (
                            <div key={req.id} className="bg-white p-4 rounded-2xl shadow-sm border border-orange-100 flex flex-col gap-3">
                                <div className="flex justify-between items-start">
@@ -825,7 +843,11 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                                            </div>
                                        )}
                                    </div>
-                                   <span className="text-xl font-bold text-green-600">{req.amount.toLocaleString()} Z</span>
+                                   <div className="text-right shrink-0">
+                                       <span className="block text-xl font-bold text-green-600">{req.amount.toLocaleString()} Z</span>
+                                       <span className="block text-sm font-bold text-gray-800">₦{cash.value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                                       {cash.isEstimate && <span className="block text-[10px] text-orange-500">est. at current rate</span>}
+                                   </div>
                                </div>
                                <div className="flex gap-2 pt-2 border-t border-gray-50">
                                    <button 
@@ -851,7 +873,9 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
            <div className="pt-4">
                <h3 className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1">History</h3>
                <div className="space-y-2 opacity-80">
-                   {history.map(req => (
+                   {history.map(req => {
+                       const cash = getRedemptionCash(req);
+                       return (
                        <div key={req.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border border-gray-100">
                            <div>
                                <p className="text-sm font-bold text-gray-700">{req.userName}</p>
@@ -859,12 +883,13 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                            </div>
                            <div className="text-right">
                                <span className="block font-bold text-gray-800">{req.amount} Z</span>
+                               <span className="block text-xs font-bold text-gray-600">₦{cash.value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}{cash.isEstimate ? ' (est.)' : ''}</span>
                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${req.status === 'Approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                    {req.status}
                                </span>
                            </div>
                        </div>
-                   ))}
+                   )})}
                </div>
            </div>
         </div>
@@ -1392,7 +1417,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                                    <Trash2 className="w-4 h-4" />
                                </button>
                            </div>
-                           <p className="text-xs text-gray-500 line-clamp-2 mt-1">{post.excerpt}</p>
+                           <p className="text-xs text-gray-500 line-clamp-2 mt-1">{stripHtml(post.excerpt)}</p>
                            <span className="inline-block mt-2 bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">{post.category}</span>
                        </div>
                    </div>
@@ -1403,12 +1428,12 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
            {isAddTipOpen && (
                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsAddTipOpen(false)}></div>
-                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl flex flex-col max-h-[85vh]">
+                   <div className="bg-white rounded-2xl w-full max-w-lg relative z-10 shadow-2xl flex flex-col max-h-[85vh]">
                        <div className="p-6 border-b border-gray-100 shrink-0 flex justify-between items-center">
                            <h3 className="text-lg font-bold text-gray-900">Add New Tip</h3>
                            <button onClick={() => setIsAddTipOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
                        </div>
-                       
+
                        <div className="overflow-y-auto p-6">
                            <form onSubmit={handleAddTip} className="space-y-3">
                                <input type="text" placeholder="Title" required className="w-full p-3 bg-gray-50 border rounded-xl text-sm" value={newTip.title} onChange={e => setNewTip({...newTip, title: e.target.value})} />
@@ -1417,9 +1442,13 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                                    <option>News</option>
                                    <option>Guide</option>
                                </select>
-                               <textarea rows={3} placeholder="Excerpt/Content" required className="w-full p-3 bg-gray-50 border rounded-xl text-sm resize-none" value={newTip.excerpt} onChange={e => setNewTip({...newTip, excerpt: e.target.value})} />
+                               <RichTextEditor
+                                   value={newTip.excerpt}
+                                   onChange={html => setNewTip({...newTip, excerpt: html})}
+                                   placeholder="Write your tip content — headings, bold, links, images..."
+                               />
                                <div className="relative">
-                                   <input type="text" placeholder="Image URL (Optional)" className="w-full p-3 bg-gray-50 border rounded-xl text-sm pl-10" value={newTip.image} onChange={e => setNewTip({...newTip, image: e.target.value})} />
+                                   <input type="text" placeholder="Cover Image URL (Optional)" className="w-full p-3 bg-gray-50 border rounded-xl text-sm pl-10" value={newTip.image} onChange={e => setNewTip({...newTip, image: e.target.value})} />
                                    <ImageIcon2 className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                                </div>
                                <button type="submit" className="w-full bg-green-700 text-white py-3 rounded-xl font-bold mt-2 hover:bg-green-800">Publish Post</button>
