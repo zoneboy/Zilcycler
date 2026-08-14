@@ -12,13 +12,36 @@ Write-Host ""
 
 # ----- Pre-flight checks -----
 
-# 1. Java
-$javaCmd = Get-Command java -ErrorAction SilentlyContinue
-if (-not $javaCmd) {
-    Write-Host "ERROR: Java not found on PATH." -ForegroundColor Red
+# 1. Java - Capacitor 8 compiles against Java 21, JDK 17 will NOT work.
+if (-not $env:JAVA_HOME -or -not (Test-Path "$env:JAVA_HOME\bin\java.exe")) {
+    # Android Studio's bundled JBR ships JDK 21
+    $studioJbr = "C:\Program Files\Android\Android Studio\jbr"
+    if (Test-Path "$studioJbr\bin\java.exe") {
+        $env:JAVA_HOME = $studioJbr
+    } else {
+        foreach ($path in @("C:\Program Files\Microsoft", "C:\Program Files\Java", "C:\Program Files\Eclipse Adoptium")) {
+            if (Test-Path $path) {
+                $jdk = Get-ChildItem -Path $path -Filter "jdk-21*" -Directory -Recurse -Depth 1 -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($jdk) { $env:JAVA_HOME = $jdk.FullName; break }
+            }
+        }
+    }
+}
+
+if (-not $env:JAVA_HOME -or -not (Test-Path "$env:JAVA_HOME\bin\java.exe")) {
+    Write-Host "ERROR: JDK 21 not found. Capacitor 8 requires it." -ForegroundColor Red
+    Write-Host "Install from https://adoptium.net/ or set `$env:JAVA_HOME manually." -ForegroundColor Yellow
     exit 1
 }
-Write-Host "[1/6] Java OK" -ForegroundColor Green
+
+$javaVersionLine = & "$env:JAVA_HOME\bin\java.exe" -version 2>&1 | Select-Object -First 1
+if ($javaVersionLine -match '"(\d+)') {
+    if ([int]$matches[1] -lt 21) {
+        Write-Host "ERROR: Capacitor 8 requires JDK 21, found JDK $($matches[1]) at $env:JAVA_HOME." -ForegroundColor Red
+        exit 1
+    }
+}
+Write-Host "[1/6] Java OK ($env:JAVA_HOME)" -ForegroundColor Green
 
 # 2. Keystore exists
 if (-not (Test-Path "zilcycler-release.keystore")) {
@@ -102,7 +125,7 @@ if ($gradleExit -ne 0) {
     Write-Host "Common causes:" -ForegroundColor Yellow
     Write-Host "  - JDK version mismatch (must be 17+)" -ForegroundColor White
     Write-Host "  - Wrong keystore password in keystore.properties" -ForegroundColor White
-    Write-Host "  - Missing Android SDK 34" -ForegroundColor White
+    Write-Host "  - Missing Android SDK 36" -ForegroundColor White
     Write-Host "  - ProGuard rule conflict (try minifyEnabled=false in build.gradle to test)" -ForegroundColor White
     exit 1
 }
