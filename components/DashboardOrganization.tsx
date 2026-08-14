@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { User, Screen, PickupTask } from '../types';
 import { useApp } from '../context/AppContext';
+import { stripHtml } from '../utils/html';
 import WalletCard from './WalletCard';
 import { Truck, FileBadge, BarChart3, Building2, Download, ChevronRight, ArrowLeft } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -319,7 +320,7 @@ const DashboardOrganization: React.FC<Props> = ({ user, onNavigate }) => {
             <div className="flex gap-4">
                <img src={latestTip.image} className="w-20 h-20 rounded-xl object-cover" alt="Tip" />
                <div className="flex-1">
-                 <p className="text-sm text-gray-600 dark:text-gray-300 mb-3 font-medium line-clamp-2">{latestTip.excerpt}</p>
+                 <p className="text-sm text-gray-600 dark:text-gray-300 mb-3 font-medium line-clamp-2">{stripHtml(latestTip.excerpt)}</p>
                  <button 
                   onClick={() => onNavigate(Screen.BLOG)}
                   className="bg-white dark:bg-gray-700 px-4 py-2 rounded-full text-xs font-bold text-gray-800 dark:text-white shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"

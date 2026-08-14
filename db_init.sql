@@ -136,6 +136,7 @@ CREATE TABLE IF NOT EXISTS redemption_requests (
     status VARCHAR(50) DEFAULT 'Pending',
     date VARCHAR(50),
     refunded BOOLEAN DEFAULT FALSE,
+    cash_value DECIMAL(12, 2),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -146,6 +147,7 @@ ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS amount DECIMAL(10, 2);
 ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Pending';
 ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS date VARCHAR(50);
 ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS refunded BOOLEAN DEFAULT FALSE;
+ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS cash_value DECIMAL(12, 2);
 ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
 -- Blog Posts Table

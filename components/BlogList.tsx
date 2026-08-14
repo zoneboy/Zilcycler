@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { X, BookOpen } from 'lucide-react';
 import { BlogPost } from '../types';
+import { sanitizeHtml, stripHtml } from '../utils/html';
 
 const BlogList: React.FC = () => {
   const { blogPosts } = useApp();
@@ -37,7 +38,7 @@ const BlogList: React.FC = () => {
               </div>
               <div className="p-5">
                 <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2 leading-tight">{blog.title}</h3>
-                <p className="text-gray-500 dark:text-gray-400 text-sm mb-4 line-clamp-2">{blog.excerpt}</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm mb-4 line-clamp-2">{stripHtml(blog.excerpt)}</p>
                 
                 <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
                   <button 
@@ -77,11 +78,10 @@ const BlogList: React.FC = () => {
                             {selectedBlog.category}
                          </span>
                          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">{selectedBlog.title}</h2>
-                         <p className="text-gray-600 dark:text-gray-300 leading-relaxed mb-6">
-                            {selectedBlog.excerpt}
-                            <br /><br />
-                            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-                         </p>
+                         <div
+                            className="rich-content text-gray-600 dark:text-gray-300 leading-relaxed mb-6"
+                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedBlog.excerpt) }}
+                         />
                          
                          <button onClick={() => setSelectedBlog(null)} className="w-full bg-green-700 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-green-800 transition-transform active:scale-95">
                             Close Article

@@ -118,6 +118,7 @@ export interface RedemptionRequest {
   userName: string;
   type: 'Cash' | 'Charity';
   amount: number;
+  cashValue?: number | null; // Naira value locked in at request time (null for legacy rows)
   status: 'Pending' | 'Approved' | 'Rejected';
   date: string;
 }

@@ -241,6 +241,9 @@ const MAX_OTP_ATTEMPTS = 5;
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 15;
 const TOKEN_EXPIRY = '12h';
+// Naira per Zoint. Computed server-side so the cash value shown to admins cannot be
+// forged by clients. Keep in sync with ZOINTS_RATE_NAIRA in constants.ts.
+const ZOINTS_RATE_NAIRA = parseFloat(process.env.ZOINTS_RATE_NAIRA || '') || 10;
 
 const hashPassword = async (password: string) => await bcrypt.hash(password, SALT_ROUNDS);
 const verifyPassword = async (password: string, storedHash: string) => {
@@ -1231,6 +1234,7 @@ export const handler = async (event: any) => {
                 userName: r.user_name,
                 type: r.type,
                 amount: parseFloat(r.amount),
+                cashValue: r.cash_value !== null && r.cash_value !== undefined ? parseFloat(r.cash_value) : null,
                 status: r.status,
                 date: r.date
             }));
@@ -1248,11 +1252,13 @@ export const handler = async (event: any) => {
                 return errorResponse(400, 'Insufficient balance', null, origin);
             }
             const reqId = `REQ-${randomUUID().substring(0,8).toUpperCase()}`;
+            // Lock in the naira value at request time — the rate may change later.
+            const cashValue = Math.round(r.amount * ZOINTS_RATE_NAIRA * 100) / 100;
             await query('BEGIN');
             try {
                 await query(
-                    `INSERT INTO redemption_requests (id, user_id, user_name, type, amount, status, date, refunded) VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE)`,
-                    [reqId, r.userId, r.userName, r.type, r.amount, r.status, r.date]
+                    `INSERT INTO redemption_requests (id, user_id, user_name, type, amount, status, date, refunded, cash_value) VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, $8)`,
+                    [reqId, r.userId, r.userName, r.type, r.amount, r.status, r.date, cashValue]
                 );
                 await query(
                     `UPDATE users SET zoints_balance = zoints_balance - $1 WHERE id = $2 AND zoints_balance >= $1`,
@@ -1265,7 +1271,7 @@ export const handler = async (event: any) => {
                     action: 'REDEMPTION_REQUESTED',
                     targetType: 'redemption',
                     targetId: reqId,
-                    metadata: { type: r.type, amount: r.amount },
+                    metadata: { type: r.type, amount: r.amount, cashValue, rate: ZOINTS_RATE_NAIRA },
                     ipAddress: clientIp,
                 });
                 return response(201, { success: true, id: reqId }, origin);
