@@ -20,14 +20,22 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Ensure password_hash column exists (Migration for existing tables)
+-- Ensure every users column exists (production tables may predate any of these)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
--- New Columns Migration
+ALTER TABLE users ADD COLUMN IF NOT EXISTS zoints_balance DECIMAL(10, 2) DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS total_recycled_kg DECIMAL(10, 2) DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bank_name VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS account_number TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS account_name VARCHAR(255);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(50);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS industry VARCHAR(100);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS esg_score VARCHAR(10);
--- Ensure account_number allows long text (for encryption) if it was previously varchar
+ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+-- Ensure account_number allows long text (for encryption); column is guaranteed to exist by now
 ALTER TABLE users ALTER COLUMN account_number TYPE TEXT;
 
 -- Security Hardening Migration (Stage 1B / 2C) - required by auth/login and account deletion
@@ -69,12 +77,29 @@ CREATE TABLE IF NOT EXISTS pickups (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Ensure every pickups column exists (for older production tables)
+ALTER TABLE pickups ADD COLUMN IF NOT EXISTS time VARCHAR(50);
+ALTER TABLE pickups ADD COLUMN IF NOT EXISTS date VARCHAR(50);
+ALTER TABLE pickups ADD COLUMN IF NOT EXISTS items TEXT;
+ALTER TABLE pickups ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Pending';
+ALTER TABLE pickups ADD COLUMN IF NOT EXISTS contact VARCHAR(255);
+ALTER TABLE pickups ADD COLUMN IF NOT EXISTS phone_number VARCHAR(50);
+ALTER TABLE pickups ADD COLUMN IF NOT EXISTS waste_image TEXT;
+ALTER TABLE pickups ADD COLUMN IF NOT EXISTS earned_zoints DECIMAL(10, 2) DEFAULT 0;
+ALTER TABLE pickups ADD COLUMN IF NOT EXISTS weight DECIMAL(10, 2) DEFAULT 0;
+ALTER TABLE pickups ADD COLUMN IF NOT EXISTS collection_details JSONB;
+ALTER TABLE pickups ADD COLUMN IF NOT EXISTS driver VARCHAR(255);
+ALTER TABLE pickups ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
 -- System Config Table
 CREATE TABLE IF NOT EXISTS system_config (
     id SERIAL PRIMARY KEY,
     maintenance_mode BOOLEAN DEFAULT FALSE,
     allow_registrations BOOLEAN DEFAULT TRUE
 );
+
+ALTER TABLE system_config ADD COLUMN IF NOT EXISTS maintenance_mode BOOLEAN DEFAULT FALSE;
+ALTER TABLE system_config ADD COLUMN IF NOT EXISTS allow_registrations BOOLEAN DEFAULT TRUE;
 
 -- Ensure default config exists
 INSERT INTO system_config (id, maintenance_mode, allow_registrations)
@@ -114,8 +139,14 @@ CREATE TABLE IF NOT EXISTS redemption_requests (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Refund tracking migration
+-- Ensure every redemption_requests column exists (for older production tables)
+ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS user_name VARCHAR(255);
+ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS type VARCHAR(50);
+ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS amount DECIMAL(10, 2);
+ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Pending';
+ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS date VARCHAR(50);
 ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS refunded BOOLEAN DEFAULT FALSE;
+ALTER TABLE redemption_requests ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
 -- Blog Posts Table
 CREATE TABLE IF NOT EXISTS blog_posts (
@@ -126,6 +157,11 @@ CREATE TABLE IF NOT EXISTS blog_posts (
     image TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS category VARCHAR(100);
+ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS excerpt TEXT;
+ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS image TEXT;
+ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
 -- Certificates Table (NEW)
 CREATE TABLE IF NOT EXISTS certificates (
@@ -138,6 +174,12 @@ CREATE TABLE IF NOT EXISTS certificates (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS org_name VARCHAR(255);
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS month VARCHAR(50);
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS year INT;
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS url TEXT;
+ALTER TABLE certificates ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
 -- Drop Off Locations Table
 CREATE TABLE IF NOT EXISTS drop_off_locations (
     id VARCHAR(255) PRIMARY KEY,
@@ -148,6 +190,11 @@ CREATE TABLE IF NOT EXISTS drop_off_locations (
     lat DECIMAL(10, 8),
     lng DECIMAL(11, 8)
 );
+
+ALTER TABLE drop_off_locations ADD COLUMN IF NOT EXISTS open_hours VARCHAR(100);
+ALTER TABLE drop_off_locations ADD COLUMN IF NOT EXISTS map_url TEXT;
+ALTER TABLE drop_off_locations ADD COLUMN IF NOT EXISTS lat DECIMAL(10, 8);
+ALTER TABLE drop_off_locations ADD COLUMN IF NOT EXISTS lng DECIMAL(11, 8);
 
 -- Default Location
 INSERT INTO drop_off_locations (id, name, address, open_hours, map_url, lat, lng)
@@ -205,3 +252,6 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_read BOOLEAN DEFAULT FALSE
 );
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
