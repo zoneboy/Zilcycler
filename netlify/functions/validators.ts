@@ -200,14 +200,6 @@ export const UpdateRedemptionSchema = z.object({
   status: z.enum(['Approved', 'Rejected']),
 });
 
-// --- Message Endpoint Schemas ---
-
-export const CreateMessageSchema = z.object({
-  senderId: z.string().min(1).max(255),
-  receiverId: z.string().min(1).max(255),
-  content: z.string().trim().min(1, 'Message cannot be empty').max(5000),
-});
-
 // --- Config & Rates Endpoint Schemas ---
 
 export const UpdateConfigSchema = z.object({
