@@ -8,7 +8,6 @@ import {
     SystemConfig, 
     WasteRates, 
     RedemptionRequest,
-    Message,
     Certificate
 } from '../types';
 import { API_BASE_URL } from '../constants';
@@ -24,7 +23,6 @@ interface AppContextType {
   blogPosts: BlogPost[];
   dropOffLocations: DropOffLocation[];
   redemptionRequests: RedemptionRequest[];
-  messages: Message[];
   certificates: Certificate[];
   sysConfig: SystemConfig;
   wasteRates: WasteRates;
@@ -53,7 +51,6 @@ interface AppContextType {
   createRedemptionRequest: (req: RedemptionRequest) => Promise<void>;
   updateRedemptionStatus: (id: string, status: 'Approved' | 'Rejected') => Promise<void>;
   
-  sendMessage: (msg: Message) => Promise<void>;
   
   updateSysConfig: (config: SystemConfig) => Promise<void>;
   updateWasteRates: (rates: WasteRates) => Promise<void>;
@@ -112,7 +109,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
     const [dropOffLocations, setDropOffLocations] = useState<DropOffLocation[]>([]);
     const [redemptionRequests, setRedemptionRequests] = useState<RedemptionRequest[]>([]);
-    const [messages, setMessages] = useState<Message[]>([]);
     const [certificates, setCertificates] = useState<Certificate[]>([]);
     const [sysConfig, setSysConfig] = useState<SystemConfig>({ maintenanceMode: false, allowRegistrations: true });
     const [wasteRates, setWasteRates] = useState<WasteRates>({});
@@ -175,15 +171,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     }, []);
 
-    const fetchMessages = useCallback(async () => {
-        try {
-            const data = await apiCall('messages');
-            setMessages(data || []);
-        } catch (e) {
-            console.error('Failed to fetch messages', e);
-        }
-    }, []);
-
     const fetchCertificates = useCallback(async () => {
         try {
             const data = await apiCall('certificates');
@@ -198,10 +185,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             fetchUsers(),
             fetchPickups(),
             fetchRedemption(),
-            fetchMessages(),
             fetchCertificates(),
         ]);
-    }, [fetchUsers, fetchPickups, fetchRedemption, fetchMessages, fetchCertificates]);
+    }, [fetchUsers, fetchPickups, fetchRedemption, fetchCertificates]);
 
     useEffect(() => {
         if (hasInitialized.current) return;
@@ -365,14 +351,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         await Promise.all([fetchRedemption(), fetchUsers()]);
     };
 
-    const sendMessage = async (msg: Message) => {
-        await apiCall('messages', {
-            method: 'POST',
-            body: JSON.stringify(msg),
-        });
-        await fetchMessages();
-    };
-
     const updateSysConfig = async (config: SystemConfig) => {
         await apiCall('config/update', {
             method: 'POST',
@@ -419,7 +397,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         blogPosts,
         dropOffLocations,
         redemptionRequests,
-        messages,
         certificates,
         sysConfig,
         wasteRates,
@@ -441,7 +418,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         getPickupsByRole,
         createRedemptionRequest,
         updateRedemptionStatus,
-        sendMessage,
         updateSysConfig,
         updateWasteRates,
         addBlogPost,

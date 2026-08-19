@@ -25,7 +25,6 @@ import {
   UpdatePickupSchema,
   CreateRedemptionSchema,
   UpdateRedemptionSchema,
-  CreateMessageSchema,
   UpdateConfigSchema,
   UpdateRatesSchema,
   CreateBlogPostSchema,
@@ -221,7 +220,6 @@ const transporter = nodemailer.createTransport({
 
 let strictRatelimit: Ratelimit | null = null;
 let standardRatelimit: Ratelimit | null = null;
-let messagesRatelimit: Ratelimit | null = null;
 let verifyRatelimit: Ratelimit | null = null;
 let errorLogRatelimit: Ratelimit | null = null;
 
@@ -229,7 +227,6 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
     const redis = Redis.fromEnv();
     strictRatelimit = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(5, '1 m'), analytics: true, prefix: 'rl:strict' });
     standardRatelimit = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(30, '1 m'), analytics: true, prefix: 'rl:std' });
-    messagesRatelimit = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(20, '1 m'), analytics: true, prefix: 'rl:msg' });
     verifyRatelimit = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(120, '1 m'), analytics: true, prefix: 'rl:verify' });
     errorLogRatelimit = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(20, '1 m'), analytics: true, prefix: 'rl:err' });
 } else {
@@ -315,7 +312,6 @@ export const handler = async (event: any) => {
   };
   const checkStrictLimit = (id: string) => safeLimit(strictRatelimit, id);
   const checkStandardLimit = (id: string) => safeLimit(standardRatelimit, id);
-  const checkMessagesLimit = (id: string) => safeLimit(messagesRatelimit, id);
   const checkVerifyLimit = (id: string) => safeLimit(verifyRatelimit, id);
   const checkErrorLogLimit = (id: string) => safeLimit(errorLogRatelimit, id);
 
@@ -1325,38 +1321,6 @@ export const handler = async (event: any) => {
                 ipAddress: clientIp,
             });
             return response(200, { success: true }, origin);
-        }
-    }
-
-    if (cleanPath === 'messages') {
-        if (method === 'GET') {
-            const { rows } = await query('SELECT * FROM messages WHERE sender_id = $1 OR receiver_id = $1 ORDER BY created_at ASC', [user.userId]);
-            const messages = rows.map((m: any) => ({
-                id: m.id,
-                senderId: m.sender_id,
-                receiverId: m.receiver_id,
-                content: m.content,
-                createdAt: m.created_at,
-                isRead: m.is_read
-            }));
-            return response(200, messages, origin);
-        }
-        if (method === 'POST') {
-            if (!(await checkMessagesLimit(`msg:${user.userId}`))) {
-                return errorResponse(429, 'You are sending messages too quickly. Please slow down.', null, origin);
-            }
-            const validation = validate(CreateMessageSchema, body);
-            if (!validation.success) return errorResponse(400, validation.error, null, origin);
-            const m = validation.data;
-            if (m.senderId !== user.userId) return errorResponse(403, 'Identity mismatch', null, origin);
-            const receiverCheck = await query('SELECT id FROM users WHERE id = $1 AND deleted_at IS NULL', [m.receiverId]);
-            if (receiverCheck.rows.length === 0) return errorResponse(404, 'Recipient not found', null, origin);
-            const msgId = `msg_${randomUUID()}`;
-            await query(
-                'INSERT INTO messages (id, sender_id, receiver_id, content) VALUES ($1, $2, $3, $4)',
-                [msgId, m.senderId, m.receiverId, m.content]
-            );
-            return response(201, { success: true, id: msgId }, origin);
         }
     }
 

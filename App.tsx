@@ -21,7 +21,6 @@ import SchedulePickup from './components/SchedulePickup';
 import BlogList from './components/BlogList';
 import Settings from './components/Settings';
 import DropOffLocations from './components/DropOffLocations';
-import MessagesWithUser from './components/Messages'; 
 import WalletScreen from './components/WalletScreen';
 import PickupHistory from './components/PickupHistory';
 import Certificates from './components/Certificates';
@@ -286,8 +285,6 @@ const MainApp: React.FC = () => {
         return <Settings user={effectiveUser} onLogout={handleLogout} />;
       case Screen.DROP_OFF:
         return <DropOffLocations />;
-      case Screen.MESSAGES:
-        return <MessagesWithUser user={effectiveUser} />; 
       case Screen.WALLET:
         return <WalletScreen user={effectiveUser} />;
       case Screen.PICKUP_HISTORY:

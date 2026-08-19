@@ -14,7 +14,6 @@ export enum Screen {
   BLOG = 'BLOG',
   SETTINGS = 'SETTINGS',
   DROP_OFF = 'DROP_OFF',
-  MESSAGES = 'MESSAGES',
   WALLET = 'WALLET',
   PICKUP_HISTORY = 'PICKUP_HISTORY',
   CERTIFICATES = 'CERTIFICATES'
@@ -131,13 +130,4 @@ export interface DropOffLocation {
   url: string;
   lat: number;
   lng: number;
-}
-
-export interface Message {
-    id: string;
-    senderId: string;
-    receiverId: string;
-    content: string;
-    createdAt: string;
-    isRead: boolean;
 }
