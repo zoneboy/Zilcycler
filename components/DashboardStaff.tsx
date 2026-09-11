@@ -220,9 +220,9 @@ const DashboardStaff: React.FC<Props> = ({ user, onLogout }) => {
 
       {/* Driver Assignment Modal - FLEX COLUMN FIX */}
       {assignModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4 pb-safe">
            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setAssignModalOpen(false)}></div>
-           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-[85vh]">
+           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-sheet">
                {/* Sticky Header */}
                <div className="flex justify-between items-center p-6 border-b border-gray-100 shrink-0">
                    <h3 className="font-bold text-gray-900">Assign Driver</h3>
@@ -232,7 +232,7 @@ const DashboardStaff: React.FC<Props> = ({ user, onLogout }) => {
                </div>
                
                {/* Scrollable Body */}
-               <div className="overflow-y-auto p-6">
+               <div className="sheet-scroll p-6">
                    <div className="space-y-2">
                        {drivers.length === 0 ? (
                            <p className="text-center text-gray-400 text-sm py-8">No active collectors found.</p>

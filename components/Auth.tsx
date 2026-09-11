@@ -484,10 +484,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   );
 
   return (
-    <div className="min-h-screen pt-safe pb-safe bg-[url('https://images.unsplash.com/photo-1542601906990-b4d3fb7d5c73?q=80&w=1000&auto=format&fit=crop')] bg-cover bg-center relative">
+    <div className="min-h-vp pt-safe pb-safe bg-[url('https://images.unsplash.com/photo-1542601906990-b4d3fb7d5c73?q=80&w=1000&auto=format&fit=crop')] bg-cover bg-center relative">
       <div className="absolute inset-0 bg-green-900/80 backdrop-blur-sm"></div>
       
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-6 text-center space-y-8">
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-vp p-6 text-center space-y-8">
         
         {view === 'landing' && (
             <div className="animate-fade-in-down">

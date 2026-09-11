@@ -16,6 +16,48 @@
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom, 20px);
   }
+
+  /* ----------------------------------------------------------------
+     Viewport sizing.
+     Android 15+ runs the webview edge-to-edge, so 100vh includes the
+     strip underneath the system navigation bar - content sized with vh
+     ends up partly off-screen. dvh measures only the visible area.
+     The vh line stays first as a fallback for WebViews older than
+     Chrome 108, which ignore the dvh declaration.
+     ---------------------------------------------------------------- */
+  .min-h-vp {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .h-vp {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* Bottom sheets and dialogs: never taller than the visible viewport,
+     leaving room for the sheet's own rounded top edge. */
+  .max-h-sheet {
+    max-height: 85vh;
+    max-height: min(85dvh, calc(100dvh - 2rem));
+  }
+
+  /* Scrollable body of a sheet. min-height:0 is the critical part - without
+     it a flex child sizes to its content, overflows the sheet's max-height
+     and gets clipped, so the bottom becomes unreachable. */
+  .sheet-scroll {
+    flex: 1 1 0%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Action row pinned below a sheet-scroll body, clear of the system bar. */
+  .sheet-footer {
+    flex-shrink: 0;
+    padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 0.25rem);
+  }
   
   .pt-safe {
     padding-top: env(safe-area-inset-top, 0px);

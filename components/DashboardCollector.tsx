@@ -219,7 +219,7 @@ const DashboardCollector: React.FC<Props> = ({ user, onLogout }) => {
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex-1 min-h-0 overflow-y-auto pb-24">
         {renderContent()}
       </div>
 
@@ -243,9 +243,9 @@ const DashboardCollector: React.FC<Props> = ({ user, onLogout }) => {
 
       {/* Detail Modal */}
       {selectedTask && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4 pb-safe">
            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={closeModal}></div>
-           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-[85vh]">
+           <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-sm relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-sheet">
                
                {/* Sticky Header with Close Button */}
                <div className="absolute top-4 right-4 z-30">
@@ -258,7 +258,7 @@ const DashboardCollector: React.FC<Props> = ({ user, onLogout }) => {
                </div>
 
                {/* Header Content Inside Scroll Area */}
-               <div className="overflow-y-auto">
+               <div className="sheet-scroll">
                    <div className="h-40 bg-gray-200 relative overflow-hidden shrink-0">
                         <div className="absolute inset-0 bg-[url('https://upload.wikimedia.org/wikipedia/commons/e/ec/OpenStreetMap_Mapnik_example.png')] bg-cover opacity-50"></div>
                         <div className="absolute bottom-4 left-4 right-4">
@@ -426,7 +426,7 @@ const DashboardCollector: React.FC<Props> = ({ user, onLogout }) => {
 
       {/* Full Screen Image Viewer */}
       {viewImage && (
-          <div className="fixed inset-0 z-[110] bg-black flex items-center justify-center p-4 animate-fade-in" onClick={() => setViewImage(null)}>
+          <div className="fixed inset-0 z-[110] bg-black flex items-center justify-center p-4 animate-fade-in pb-safe" onClick={() => setViewImage(null)}>
               <button 
                 className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-colors"
                 onClick={() => setViewImage(null)}

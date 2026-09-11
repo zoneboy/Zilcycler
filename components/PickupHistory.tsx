@@ -99,7 +99,7 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
       </div>
 
       {/* List */}
-      <div className="space-y-4 flex-1 overflow-y-auto pb-4">
+      <div className="space-y-4 flex-1 min-h-0 overflow-y-auto pb-4">
         {displayedData.length > 0 ? (
             <>
                 {displayedData.map((pickup) => (
@@ -176,9 +176,9 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
 
       {/* Detail Modal */}
       {selectedPickup && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pb-safe">
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedPickup(null)}></div>
-              <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl relative z-10 flex flex-col max-h-[80vh] animate-fade-in-up">
+              <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl relative z-10 flex flex-col max-h-sheet animate-fade-in-up">
                    
                    {/* Sticky Header */}
                    <div className="flex-none flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700">
@@ -189,7 +189,7 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
                    </div>
 
                    {/* Scrollable Body */}
-                   <div className="flex-1 overflow-y-auto p-5">
+                   <div className="sheet-scroll p-5">
                        <div className="space-y-6">
                            <div className="flex items-center justify-between">
                                <div>
@@ -257,7 +257,7 @@ const PickupHistory: React.FC<Props> = ({ user, onBack }) => {
 
       {/* Full Screen Image Viewer */}
       {viewImage && (
-          <div className="fixed inset-0 z-[110] bg-black flex items-center justify-center p-4 animate-fade-in" onClick={() => setViewImage(null)}>
+          <div className="fixed inset-0 z-[110] bg-black flex items-center justify-center p-4 animate-fade-in pb-safe" onClick={() => setViewImage(null)}>
               <button 
                 className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-colors"
                 onClick={() => setViewImage(null)}

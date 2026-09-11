@@ -69,7 +69,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, Error
     render() {
         if (this.state.hasError) {
             return (
-                <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-6">
+                <div className="min-h-vp bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-6">
                     <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 text-center">
                         <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                             <AlertTriangle className="w-8 h-8 text-red-600 dark:text-red-400" />
@@ -105,7 +105,7 @@ const ForceUpdateModal: React.FC<{ result: VersionCheckResult }> = ({ result }) 
     };
     
     return (
-        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 pb-safe">
             <div className="max-w-sm w-full bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 text-center">
                 <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Download className="w-8 h-8 text-green-700 dark:text-green-500" />
@@ -243,7 +243,7 @@ const MainApp: React.FC = () => {
   // Loading state
   if (loading || isVerifying) {
        return (
-        <div className="h-screen w-full flex flex-col items-center justify-center text-green-800 bg-gray-50 dark:bg-gray-900">
+        <div className="h-vp w-full flex flex-col items-center justify-center text-green-800 bg-gray-50 dark:bg-gray-900">
            <div className="w-8 h-8 border-4 border-green-200 border-t-green-700 rounded-full animate-spin mb-4"></div>
            <span className="font-bold dark:text-white">{loading ? 'Initializing Zilcycler...' : 'Verifying Session...'}</span>
         </div>
@@ -326,8 +326,8 @@ const MainApp: React.FC = () => {
       {offlineBanner}
       {/* pt-safe: Android 15+ forces edge-to-edge, so the webview draws under the
           status bar. env(safe-area-inset-top) is 0 on web and older devices. */}
-      <div className={`bg-gray-50 dark:bg-gray-900 min-h-screen flex justify-center font-sans text-gray-900 dark:text-gray-100 transition-colors duration-300 ${!isOnline ? 'pt-10' : 'pt-safe'}`}>
-        <div className="w-full max-w-md bg-white dark:bg-gray-900 min-h-screen shadow-2xl relative flex flex-col transition-colors duration-300">
+      <div className={`bg-gray-50 dark:bg-gray-900 min-h-vp flex justify-center font-sans text-gray-900 dark:text-gray-100 transition-colors duration-300 ${!isOnline ? 'pt-10' : 'pt-safe'}`}>
+        <div className="w-full max-w-md bg-white dark:bg-gray-900 min-h-vp shadow-2xl relative flex flex-col transition-colors duration-300">
           
           {currentScreen !== Screen.DASHBOARD && (
               <div className="p-4 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 sticky top-0 z-20 transition-colors duration-300">

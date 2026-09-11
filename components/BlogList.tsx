@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { X, BookOpen } from 'lucide-react';
+import { X } from 'lucide-react';
 import { BlogPost } from '../types';
 import { sanitizeHtml, stripHtml } from '../utils/html';
 
@@ -14,9 +14,6 @@ const BlogList: React.FC = () => {
         <div>
            <h2 className="text-xl font-bold text-gray-800 dark:text-white">Recycling Tips</h2>
            <p className="text-xs text-gray-500 dark:text-gray-400">Stay informed, stay sustainable.</p>
-        </div>
-        <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-700 dark:text-green-400">
-            <BookOpen className="w-5 h-5" />
         </div>
       </div>
 
@@ -56,9 +53,9 @@ const BlogList: React.FC = () => {
 
       {/* Blog Detail Modal - FIXED SCROLL STRUCTURE */}
       {selectedBlog && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pb-safe">
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedBlog(null)}></div>
-              <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-2xl shadow-2xl relative z-10 flex flex-col max-h-[80vh] animate-fade-in-up">
+              <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-2xl shadow-2xl relative z-10 flex flex-col max-h-sheet animate-fade-in-up">
                  
                  {/* Sticky Header with Close Button (Overlay on Image style or solid bar) */}
                  {/* Using solid bar for better scrolling logic separation */}
@@ -70,7 +67,7 @@ const BlogList: React.FC = () => {
                  </div>
                  
                  {/* Scrollable Body */}
-                 <div className="flex-1 overflow-y-auto">
+                 <div className="sheet-scroll">
                      <img src={selectedBlog.image} className="w-full h-56 object-cover" alt={selectedBlog.title} />
                      
                      <div className="p-6">
