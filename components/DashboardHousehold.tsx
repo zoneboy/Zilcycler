@@ -231,12 +231,12 @@ const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
 
       {/* Breakdown Modal - FLEX COLUMN FIX */}
       {showBreakdown && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4 pb-safe">
            {/* Backdrop */}
            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowBreakdown(false)}></div>
            
            {/* Content */}
-           <div className="bg-white dark:bg-gray-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl relative z-10 flex flex-col max-h-[85vh] animate-fade-in-up">
+           <div className="bg-white dark:bg-gray-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl relative z-10 flex flex-col max-h-sheet animate-fade-in-up">
               {/* Sticky Header */}
               <div className="flex justify-between items-center p-6 border-b border-gray-100 dark:border-gray-800 shrink-0">
                  <h2 className="text-xl font-bold text-gray-800 dark:text-white">Your Impact</h2>
@@ -246,7 +246,7 @@ const DashboardHousehold: React.FC<Props> = ({ user, onNavigate }) => {
               </div>
 
               {/* Scrollable Body */}
-              <div className="p-6 overflow-y-auto">
+              <div className="p-6 sheet-scroll">
                   <div className="space-y-3">
                      {currentBreakdown.map((item) => (
                         <div key={item.category} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">

@@ -22,7 +22,7 @@ export const API_BASE_URL = Capacitor.isNativePlatform()
 // MIN_SUPPORTED_VERSION matches the lowest version still allowed.
 // Below that, force-update modal triggers.
 // ============================================================
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.0.1';
 export const MIN_SUPPORTED_VERSION = '1.0.0';
 
 // ============================================================

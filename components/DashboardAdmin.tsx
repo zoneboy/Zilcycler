@@ -150,7 +150,7 @@ const RecyclingVolumeView: React.FC<{
                  </span>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
                 {volumeData.length === 0 ? (
                     <div className="text-center py-10 text-gray-400">
                         <p>No recycling data recorded for this period.</p>
@@ -988,7 +988,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
            </div>
 
            {/* User List */}
-           <div className="flex-1 overflow-y-auto space-y-3 pb-4">
+           <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pb-4">
                {filteredUsers.map(u => {
                    const metrics = getFilteredMetrics(u);
                    // For default view, use the global balance, else use calculated earned in period
@@ -1052,9 +1052,9 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
 
            {/* User Detail Modal - FLEX COLUMN FIX */}
            {selectedUser && (
-              <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
+              <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4 pb-safe">
                   <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedUser(null)}></div>
-                  <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-[85vh]">
+                  <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-sheet">
                       {/* Sticky Header */}
                       <div className="flex justify-between items-start p-6 border-b border-gray-100 shrink-0">
                           <div className="flex items-center gap-4">
@@ -1074,7 +1074,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                       </div>
 
                       {/* Scrollable Body */}
-                      <div className="overflow-y-auto p-6">
+                      <div className="sheet-scroll p-6">
                           {/* Detail Grid */}
                           <div className="grid grid-cols-2 gap-4 mb-6">
                                <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
@@ -1142,15 +1142,15 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
 
            {/* Add User Modal - FLEX COLUMN FIX */}
            {isAddUserOpen && (
-               <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+               <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pb-safe">
                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsAddUserOpen(false)}></div>
-                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl flex flex-col max-h-[85vh]">
+                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl flex flex-col max-h-sheet">
                        <div className="p-6 border-b border-gray-100 shrink-0 flex justify-between items-center">
                            <h3 className="text-lg font-bold text-gray-900">Add {addingRole === UserRole.COLLECTOR ? 'Collector' : 'Staff'}</h3>
                            <button onClick={() => setIsAddUserOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
                        </div>
                        
-                       <div className="overflow-y-auto p-6">
+                       <div className="sheet-scroll p-6">
                            <form onSubmit={handleAddUser} className="space-y-3">
                                <input type="text" placeholder="Full Name" required className="w-full p-3 bg-gray-50 border rounded-xl" value={newUserForm.name} onChange={e => setNewUserForm({...newUserForm, name: e.target.value})} />
                                <input type="email" placeholder="Email Address" required className="w-full p-3 bg-gray-50 border rounded-xl" value={newUserForm.email} onChange={e => setNewUserForm({...newUserForm, email: e.target.value})} />
@@ -1220,7 +1220,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
             </div>
 
             {/* Table/List View */}
-            <div className="flex-1 overflow-y-auto pb-4 space-y-3">
+            <div className="flex-1 min-h-0 overflow-y-auto pb-4 space-y-3">
                 {displayedPickups.length === 0 ? (
                     <div className="text-center py-10 text-gray-400">No pickups found.</div>
                 ) : (
@@ -1272,9 +1272,9 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
 
             {/* Pickup Detail Modal - FLEX COLUMN FIX */}
             {selectedPickup && (
-                <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
+                <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4 pb-safe">
                   <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedPickup(null)}></div>
-                  <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl flex flex-col max-h-[85vh] animate-fade-in-up">
+                  <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl flex flex-col max-h-sheet animate-fade-in-up">
                       {/* Sticky Header */}
                       <div className="flex justify-between items-center p-6 border-b border-gray-100 shrink-0">
                           <h3 className="font-bold text-lg text-gray-900">Pickup Details</h3>
@@ -1282,7 +1282,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                       </div>
 
                       {/* Scrollable Body */}
-                      <div className="overflow-y-auto p-6">
+                      <div className="sheet-scroll p-6">
                           {/* Image - Clickable */}
                           {selectedPickup.wasteImage && (
                               <div 
@@ -1371,7 +1371,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 min-h-0 overflow-y-auto">
                 <h3 className="font-bold text-gray-800 mb-3">Transactions</h3>
                 <div className="space-y-2">
                     {selectedDayStats.items.map(p => (
@@ -1426,15 +1426,15 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
 
            {/* Add Tip Modal - FLEX COLUMN FIX */}
            {isAddTipOpen && (
-               <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+               <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pb-safe">
                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsAddTipOpen(false)}></div>
-                   <div className="bg-white rounded-2xl w-full max-w-lg relative z-10 shadow-2xl flex flex-col max-h-[85vh]">
+                   <div className="bg-white rounded-2xl w-full max-w-lg relative z-10 shadow-2xl flex flex-col max-h-sheet">
                        <div className="p-6 border-b border-gray-100 shrink-0 flex justify-between items-center">
                            <h3 className="text-lg font-bold text-gray-900">Add New Tip</h3>
                            <button onClick={() => setIsAddTipOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
                        </div>
 
-                       <div className="overflow-y-auto p-6">
+                       <div className="sheet-scroll p-6">
                            <form onSubmit={handleAddTip} className="space-y-3">
                                <input type="text" placeholder="Title" required className="w-full p-3 bg-gray-50 border rounded-xl text-sm" value={newTip.title} onChange={e => setNewTip({...newTip, title: e.target.value})} />
                                <select className="w-full p-3 bg-gray-50 border rounded-xl text-sm" value={newTip.category} onChange={e => setNewTip({...newTip, category: e.target.value})}>
@@ -1493,15 +1493,15 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
 
            {/* Issue Certificate Modal - FLEX COLUMN FIX */}
            {isCertModalOpen && (
-               <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+               <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pb-safe">
                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsCertModalOpen(false)}></div>
-                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl flex flex-col max-h-[85vh]">
+                   <div className="bg-white rounded-2xl w-full max-w-sm relative z-10 shadow-2xl flex flex-col max-h-sheet">
                        <div className="p-6 border-b border-gray-100 shrink-0 flex justify-between items-center">
                            <h3 className="text-lg font-bold text-gray-900">Issue Certificate</h3>
                            <button onClick={() => setIsCertModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
                        </div>
                        
-                       <div className="overflow-y-auto p-6">
+                       <div className="sheet-scroll p-6">
                            <form onSubmit={handleAddCertificate} className="space-y-3">
                                <div>
                                    <label className="text-xs font-bold text-gray-500 mb-1 block">Organization</label>
@@ -1662,7 +1662,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
           {currentView === 'DASHBOARD' && renderDashboard()}
           {currentView === 'RECYCLING_VOLUME' && <RecyclingVolumeView pickups={pickups} onBack={() => setCurrentView('DASHBOARD')} />}
           {currentView === 'REQUESTS' && renderRequests()}
@@ -1676,7 +1676,7 @@ const DashboardAdmin: React.FC<Props> = ({ user, onLogout }) => {
 
        {/* Full Screen Image Viewer */}
       {viewImage && (
-          <div className="fixed inset-0 z-[110] bg-black flex items-center justify-center p-4 animate-fade-in" onClick={() => setViewImage(null)}>
+          <div className="fixed inset-0 z-[110] bg-black flex items-center justify-center p-4 animate-fade-in pb-safe" onClick={() => setViewImage(null)}>
               <button 
                 className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white backdrop-blur-md transition-colors"
                 onClick={() => setViewImage(null)}

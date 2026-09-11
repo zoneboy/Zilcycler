@@ -112,9 +112,9 @@ const WalletCard: React.FC<WalletCardProps> = ({ user, balance }) => {
 
       {/* Redeem Modal - FLEX COLUMN FIX */}
       {showRedeemModal && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4 pb-safe">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={resetModal}></div>
-            <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-[85vh]">
+            <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md relative z-10 shadow-2xl animate-fade-in-up flex flex-col max-h-sheet">
                 
                 {/* --- SUCCESS VIEW --- */}
                 {view === 'SUCCESS' && (
@@ -153,7 +153,7 @@ const WalletCard: React.FC<WalletCardProps> = ({ user, balance }) => {
                             <div className="w-9"></div> {/* Spacer */}
                         </div>
 
-                        <div className="p-6 overflow-y-auto">
+                        <div className="p-6 sheet-scroll">
                             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 mb-6">
                                 <div className="flex justify-between items-end mb-2">
                                     <label className="text-xs font-bold text-gray-500 uppercase">Amount (Z)</label>
@@ -200,9 +200,14 @@ const WalletCard: React.FC<WalletCardProps> = ({ user, balance }) => {
                                 )}
                             </div>
 
+                        </div>
+
+                        {/* Pinned outside the scroll area: the primary action must stay
+                            visible no matter how short the screen or how tall the form. */}
+                        <div className="sheet-footer px-6 pt-4 border-t border-gray-100 bg-white">
                             <button 
                                 onClick={handleConfirmAmount}
-                                className="w-full bg-green-700 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-green-800 transition-transform active:scale-95 mt-6"
+                                className="w-full bg-green-700 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-green-800 transition-transform active:scale-95"
                             >
                                 Confirm {selectedType === 'Cash' ? 'Withdrawal' : 'Donation'}
                             </button>
@@ -220,7 +225,7 @@ const WalletCard: React.FC<WalletCardProps> = ({ user, balance }) => {
                             </button>
                         </div>
 
-                        <div className="p-6 overflow-y-auto">
+                        <div className="p-6 sheet-scroll">
                             <div className="space-y-3">
                                 <button onClick={() => handleOptionSelect('Cash')} className="w-full flex items-center gap-4 p-4 rounded-2xl border border-gray-100 bg-green-50 hover:bg-green-100 hover:border-green-200 transition-all group text-left">
                                     <div className="w-10 h-10 rounded-full bg-green-200 text-green-700 flex items-center justify-center group-hover:scale-110 transition-transform">

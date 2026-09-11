@@ -283,9 +283,9 @@ const WalletScreen: React.FC<Props> = ({ user }) => {
 
       {/* Market Rates Modal - FIXED SCROLL STRUCTURE */}
       {showRates && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pb-safe">
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowRates(false)}></div>
-              <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl relative z-10 flex flex-col max-h-[80vh] animate-fade-in-up">
+              <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl relative z-10 flex flex-col max-h-sheet animate-fade-in-up">
                   
                   {/* Sticky Header */}
                   <div className="flex-none flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700">
@@ -298,7 +298,7 @@ const WalletScreen: React.FC<Props> = ({ user }) => {
                   </div>
                   
                   {/* Scrollable Content */}
-                  <div className="flex-1 overflow-y-auto p-5">
+                  <div className="sheet-scroll p-5">
                       <div className="space-y-3">
                           {Object.keys(wasteRates).length === 0 ? (
                               <p className="text-center text-gray-500 py-4">Rates not configured.</p>
@@ -329,9 +329,9 @@ const WalletScreen: React.FC<Props> = ({ user }) => {
 
       {/* Transaction Detail Modal - FIXED SCROLL STRUCTURE */}
       {selectedTransaction && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pb-safe">
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedTransaction(null)}></div>
-              <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl relative z-10 flex flex-col max-h-[80vh] animate-fade-in-up">
+              <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl relative z-10 flex flex-col max-h-sheet animate-fade-in-up">
                   
                   {/* Sticky Header */}
                   <div className="flex-none flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700">
@@ -344,7 +344,7 @@ const WalletScreen: React.FC<Props> = ({ user }) => {
                   </div>
 
                   {/* Scrollable Content */}
-                  <div className="flex-1 overflow-y-auto p-5">
+                  <div className="sheet-scroll p-5">
                       <div className="space-y-4">
                           <div className="flex flex-col items-center justify-center py-4">
                               <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-3 ${selectedTransaction.type === 'EARNED' ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400'}`}>

@@ -4,7 +4,7 @@ import { User, UserRole } from '../types';
 import { useApp } from '../context/AppContext';
 import { captureImage, pickImageFromInput, uploadToCloudinary } from '../utils/imageUpload';
 import { isNative } from '../utils/native';
-import { Bell, Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, ArrowLeft, Save, Lock, Eye, EyeOff, Globe, Trash2, AlertTriangle, Landmark, Camera, Loader2, Phone, Mail, Headphones, Share2 } from 'lucide-react';
+import { Shield, CircleUser, LogOut, ChevronRight, ChevronDown, Moon, ArrowLeft, Save, Lock, Eye, EyeOff, Trash2, AlertTriangle, Landmark, Camera, Loader2, Phone, Mail, Headphones, Share2 } from 'lucide-react';
 
 interface Props {
   user: User;
@@ -16,7 +16,6 @@ type SettingsView = 'MAIN' | 'ACCOUNT' | 'PRIVACY' | 'SUPPORT' | 'DELETE_ACCOUNT
 const Settings: React.FC<Props> = ({ user, onLogout }) => {
   const { updateUser, initiateChangePassword, confirmChangePassword, initiateAccountDeletion, confirmAccountDeletion } = useApp();
   const [currentView, setCurrentView] = useState<SettingsView>('MAIN');
-  const [notifications, setNotifications] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [darkMode, setDarkMode] = useState(() => {
@@ -49,8 +48,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
   const [otp, setOtp] = useState('');
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   
-  const [publicProfile, setPublicProfile] = useState(false);
-  const [dataSharing, setDataSharing] = useState(true);
 
   // STAGE 2C: Account deletion state
   const [deleteStep, setDeleteStep] = useState<'CONFIRM' | 'PASSWORD' | 'OTP'>('CONFIRM');
@@ -440,21 +437,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
           <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm uppercase tracking-wide">App Preferences</h3>
         </div>
         
-        <div className="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-50 dark:border-gray-700 last:border-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
-              <Bell className="w-5 h-5" />
-            </div>
-            <span className="font-medium text-gray-700 dark:text-gray-200">Notifications</span>
-          </div>
-          <button 
-            onClick={() => setNotifications(!notifications)}
-            className={`w-12 h-6 rounded-full transition-colors relative ${notifications ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'}`}
-          >
-            <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${notifications ? 'left-6.5 translate-x-1' : 'left-0.5'}`}></div>
-          </button>
-        </div>
-
         <div className="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg">
@@ -820,38 +802,6 @@ const Settings: React.FC<Props> = ({ user, onLogout }) => {
                 </>
             )}
         </form>
-
-        <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden transition-colors">
-             <h3 className="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2 mb-4">
-                <Globe className="w-4 h-4 text-green-600" /> Privacy Settings
-            </h3>
-            
-            <div className="flex items-center justify-between py-3 border-b border-gray-50 dark:border-gray-700">
-                 <div>
-                     <span className="text-sm font-bold text-gray-700 dark:text-gray-300 block">Public Profile</span>
-                     <span className="text-xs text-gray-400 dark:text-gray-500">Allow others to see your impact stats</span>
-                 </div>
-                 <button 
-                    onClick={() => setPublicProfile(!publicProfile)}
-                    className={`w-12 h-6 rounded-full transition-colors relative ${publicProfile ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'}`}
-                 >
-                    <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${publicProfile ? 'left-6.5 translate-x-1' : 'left-0.5'}`}></div>
-                 </button>
-            </div>
-            
-            <div className="flex items-center justify-between py-3">
-                 <div>
-                     <span className="text-sm font-bold text-gray-700 dark:text-gray-300 block">Data Sharing</span>
-                     <span className="text-xs text-gray-400 dark:text-gray-500">Help improve Zilcycler with usage data</span>
-                 </div>
-                 <button 
-                    onClick={() => setDataSharing(!dataSharing)}
-                    className={`w-12 h-6 rounded-full transition-colors relative ${dataSharing ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'}`}
-                 >
-                    <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${dataSharing ? 'left-6.5 translate-x-1' : 'left-0.5'}`}></div>
-                 </button>
-            </div>
-        </div>
 
         {/* STAGE 2C: Real account deletion - admins can't self-delete */}
         {user.role !== UserRole.ADMIN && (
